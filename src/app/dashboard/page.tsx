@@ -2,106 +2,151 @@
 
 import { useMemo } from "react";
 import { ALL_PROJECTS_ID, useProjectContext } from "@/context/ProjectContext";
-import { activities, intakeRecords, risks } from "@/lib/mock-data";
-import { PageHeader } from "@/components/layout/PageHeader";
+import { risks } from "@/lib/mock-data";
+import { getScheduleForProject } from "@/lib/schedule-data";
 import { StatCard } from "@/components/ui/StatCard";
 import {
   Card,
+  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/Card";
-import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/Table";
-import { ProjectStatusBadge, RiskSeverityBadge } from "@/components/ui/Badge";
-import { ProgressBar } from "@/components/ui/ProgressBar";
-import { EmptyState } from "@/components/ui/EmptyState";
-import {
-  ActivitiesIcon,
-  DashboardIcon,
-  IntakeIcon,
-  RisksIcon,
-} from "@/components/icons";
+import { ProjectStatusBadge } from "@/components/ui/Badge";
+import { PlannedActualBar } from "@/components/dashboard/PlannedActualBar";
+import { ScheduleChainVisual } from "@/components/dashboard/ScheduleChainVisual";
+import { ScheduleChainTable } from "@/components/dashboard/ScheduleChainTable";
+import { ExecutionFeed } from "@/components/dashboard/ExecutionFeed";
+import { AlertsPanel } from "@/components/dashboard/AlertsPanel";
 import { formatDate } from "@/lib/utils";
 
 export default function DashboardPage() {
   const { projects, selectedProjectId, selectedProject } = useProjectContext();
-  const isPortfolio = selectedProjectId === ALL_PROJECTS_ID;
+  const focusProject = selectedProject ?? projects[0];
 
-  const visibleProjects = isPortfolio
-    ? projects
-    : projects.filter((p) => p.id === selectedProjectId);
-
-  const scopedActivities = useMemo(
-    () =>
-      isPortfolio
-        ? activities
-        : activities.filter((a) => a.projectId === selectedProjectId),
-    [isPortfolio, selectedProjectId]
+  const chain = useMemo(
+    () => getScheduleForProject(focusProject.id),
+    [focusProject.id]
+  );
+  const projectRisks = useMemo(
+    () => risks.filter((r) => r.projectId === focusProject.id),
+    [focusProject.id]
   );
 
-  const scopedRisks = useMemo(
-    () =>
-      isPortfolio ? risks : risks.filter((r) => r.projectId === selectedProjectId),
-    [isPortfolio, selectedProjectId]
+  const plannedProgress = Math.round(
+    chain.reduce((sum, a) => sum + a.planned, 0) / chain.length
   );
-
-  const scopedIntake = useMemo(
-    () =>
-      isPortfolio
-        ? intakeRecords
-        : intakeRecords.filter((r) => r.projectId === selectedProjectId),
-    [isPortfolio, selectedProjectId]
+  const actualProgress = Math.round(
+    chain.reduce((sum, a) => sum + a.actual, 0) / chain.length
   );
+  const overallVariance = actualProgress - plannedProgress;
+  const delayedCount = chain.filter((a) => a.status === "delayed").length;
+  const atRiskCount = chain.filter((a) => a.status === "at-risk").length;
+  const maxDelay = Math.max(0, ...chain.map((a) => a.delayDays));
 
-  const openRisks = scopedRisks.filter(
-    (r) => r.status === "open" || r.status === "mitigating"
-  ).length;
-  const activeActivities = scopedActivities.filter(
-    (a) => a.status === "in-progress"
-  ).length;
-  const pendingIntake = scopedIntake.filter(
-    (r) => r.status === "pending-review" || r.status === "flagged"
-  ).length;
+  const varianceTone =
+    overallVariance >= 0
+      ? "success"
+      : overallVariance >= -10
+        ? "warning"
+        : "danger";
 
   return (
     <div>
-      <PageHeader
-        title="Dashboard"
-        description={
-          isPortfolio
-            ? "Portfolio-wide execution intelligence across all active projects."
-            : `Execution intelligence for ${selectedProject?.name}.`
-        }
-      />
+      <Card className="mb-4">
+        <CardContent className="flex flex-wrap items-start justify-between gap-6">
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-semibold text-slate-900">
+                {focusProject.name}
+              </h2>
+              <ProjectStatusBadge status={focusProject.status} />
+            </div>
+            <p className="mt-1 font-mono text-xs text-slate-400">
+              {focusProject.code} · {focusProject.location}
+            </p>
+            <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs">
+              <div>
+                <dt className="inline text-slate-400">Sector </dt>
+                <dd className="inline font-medium text-slate-600">
+                  {focusProject.sector}
+                </dd>
+              </div>
+              <div>
+                <dt className="inline text-slate-400">Contractor </dt>
+                <dd className="inline font-medium text-slate-600">
+                  {focusProject.contractor}
+                </dd>
+              </div>
+              <div>
+                <dt className="inline text-slate-400">Timeline </dt>
+                <dd className="inline font-medium text-slate-600">
+                  {formatDate(focusProject.startDate)} –{" "}
+                  {formatDate(focusProject.endDate)}
+                </dd>
+              </div>
+              <div>
+                <dt className="inline text-slate-400">Budget utilized </dt>
+                <dd className="inline font-medium text-slate-600">
+                  {focusProject.budgetUtilized}%
+                </dd>
+              </div>
+            </dl>
+          </div>
+          <div className="w-full max-w-xs">
+            <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-slate-500">
+              Critical path progress
+            </p>
+            <PlannedActualBar
+              planned={plannedProgress}
+              actual={actualProgress}
+              size="lg"
+              showLabels
+            />
+          </div>
+        </CardContent>
+      </Card>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {selectedProjectId === ALL_PROJECTS_ID && (
+        <p className="mb-4 text-xs text-slate-500">
+          Showing the command center for{" "}
+          <strong className="font-medium text-slate-700">
+            {focusProject.name}
+          </strong>{" "}
+          — select a different project above to switch focus.
+        </p>
+      )}
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard
-          label="Projects in scope"
-          value={visibleProjects.length}
-          hint={isPortfolio ? "Across all sectors" : selectedProject?.sector}
+          label="Planned progress"
+          value={`${plannedProgress}%`}
+          hint="Critical path, to date"
+          tone="neutral"
+        />
+        <StatCard
+          label="Actual progress"
+          value={`${actualProgress}%`}
+          hint="Reported from field"
           tone="info"
-          icon={<DashboardIcon className="h-[18px] w-[18px]" />}
         />
         <StatCard
-          label="Active activities"
-          value={activeActivities}
-          hint={`${scopedActivities.length} tracked total`}
-          tone="success"
-          icon={<ActivitiesIcon className="h-[18px] w-[18px]" />}
+          label="Schedule variance"
+          value={`${overallVariance > 0 ? "+" : ""}${overallVariance}%`}
+          hint={maxDelay > 0 ? `${maxDelay}d slip on critical path` : "On schedule"}
+          tone={varianceTone}
         />
         <StatCard
-          label="Open risks"
-          value={openRisks}
-          hint={`${scopedRisks.length} logged total`}
+          label="Delayed stages"
+          value={delayedCount}
+          hint={`of ${chain.length} tracked`}
           tone="danger"
-          icon={<RisksIcon className="h-[18px] w-[18px]" />}
         />
         <StatCard
-          label="Records to review"
-          value={pendingIntake}
-          hint={`${scopedIntake.length} captured total`}
+          label="At-risk stages"
+          value={atRiskCount}
+          hint="Blocked by a dependency"
           tone="warning"
-          icon={<IntakeIcon className="h-[18px] w-[18px]" />}
         />
       </div>
 
@@ -109,99 +154,57 @@ export default function DashboardPage() {
         <Card className="lg:col-span-2">
           <CardHeader>
             <div>
-              <CardTitle>Project progress</CardTitle>
+              <CardTitle>Execution chain — planned vs. actual</CardTitle>
               <CardDescription>
-                Physical progress against planned schedule.
+                Each stage depends on the one before it. A slip upstream
+                cascades into risk downstream.
               </CardDescription>
             </div>
           </CardHeader>
-          {visibleProjects.length === 0 ? (
-            <EmptyState
-              title="No projects in scope"
-              description="Select a different project from the selector above."
-            />
-          ) : (
-            <Table>
-              <THead>
-                <Th>Project</Th>
-                <Th>Sector</Th>
-                <Th>Status</Th>
-                <Th className="w-48">Progress</Th>
-              </THead>
-              <TBody>
-                {visibleProjects.map((project) => (
-                  <Tr key={project.id}>
-                    <Td>
-                      <div>
-                        <p className="font-medium text-slate-800">
-                          {project.name}
-                        </p>
-                        <p className="font-mono text-xs text-slate-400">
-                          {project.code}
-                        </p>
-                      </div>
-                    </Td>
-                    <Td className="text-slate-500">{project.sector}</Td>
-                    <Td>
-                      <ProjectStatusBadge status={project.status} />
-                    </Td>
-                    <Td>
-                      <ProgressBar value={project.progress} />
-                    </Td>
-                  </Tr>
-                ))}
-              </TBody>
-            </Table>
-          )}
+          <ScheduleChainVisual activities={chain} />
         </Card>
 
         <Card>
           <CardHeader>
             <div>
-              <CardTitle>Top risks</CardTitle>
-              <CardDescription>By severity, most urgent first.</CardDescription>
+              <CardTitle>Active alerts</CardTitle>
+              <CardDescription>
+                Schedule cascades and open risks for this project.
+              </CardDescription>
             </div>
           </CardHeader>
-          {scopedRisks.length === 0 ? (
-            <EmptyState
-              title="No risks logged"
-              description="This scope currently has no recorded risks."
-            />
-          ) : (
-            <ul className="divide-y divide-slate-100">
-              {scopedRisks
-                .slice()
-                .sort((a, b) => severityWeight(b) - severityWeight(a))
-                .slice(0, 5)
-                .map((risk) => (
-                  <li key={risk.id} className="px-5 py-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-medium text-slate-800">
-                          {risk.title}
-                        </p>
-                        <p className="mt-0.5 text-xs text-slate-500">
-                          {risk.code} · Due {risk.dueDate ? formatDate(risk.dueDate) : "—"}
-                        </p>
-                      </div>
-                      <RiskSeverityBadge severity={risk.severity} />
-                    </div>
-                  </li>
-                ))}
-            </ul>
-          )}
+          <AlertsPanel activities={chain} risks={projectRisks} />
+        </Card>
+      </div>
+
+      <div className="mt-6">
+        <Card>
+          <CardHeader>
+            <div>
+              <CardTitle>Activity status</CardTitle>
+              <CardDescription>
+                Every tracked stage in this project&apos;s schedule, searchable
+                and sortable.
+              </CardDescription>
+            </div>
+          </CardHeader>
+          <ScheduleChainTable activities={chain} />
+        </Card>
+      </div>
+
+      <div className="mt-6">
+        <Card>
+          <CardHeader>
+            <div>
+              <CardTitle>Recent execution updates</CardTitle>
+              <CardDescription>
+                Latest field reports linked to this project&apos;s schedule.
+              </CardDescription>
+            </div>
+          </CardHeader>
+          <ExecutionFeed activities={chain} />
         </Card>
       </div>
     </div>
   );
-}
-
-function severityWeight(risk: { severity: string }) {
-  const order: Record<string, number> = {
-    critical: 4,
-    high: 3,
-    medium: 2,
-    low: 1,
-  };
-  return order[risk.severity] ?? 0;
 }

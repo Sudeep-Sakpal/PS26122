@@ -29,7 +29,7 @@ export function Th({
   children,
 }: {
   className?: string;
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }) {
   return (
     <th
@@ -51,12 +51,13 @@ export function TBody({ children }: { children: React.ReactNode }) {
 export function Tr({
   className,
   children,
-}: {
-  className?: string;
-  children: React.ReactNode;
-}) {
+  ...rest
+}: React.HTMLAttributes<HTMLTableRowElement>) {
   return (
-    <tr className={cn("transition-colors hover:bg-slate-50/70", className)}>
+    <tr
+      className={cn("transition-colors hover:bg-slate-50/70", className)}
+      {...rest}
+    >
       {children}
     </tr>
   );

@@ -22,6 +22,7 @@ export type ActivityStatus =
   | "in-progress"
   | "completed"
   | "delayed"
+  | "at-risk"
   | "blocked";
 
 export interface Activity {
@@ -38,6 +39,36 @@ export interface Activity {
   actualStart?: string;
   actualEnd?: string;
   linkedRecords: number;
+}
+
+export interface ExecutionUpdate {
+  id: string;
+  date: string;
+  author: string;
+  note: string;
+}
+
+// A schedule-linked construction stage within a project's critical path.
+// This is the core PS 26122 concept: planned vs. actual progress drives
+// variance, variance drives delay, and delay cascades into downstream risk
+// for dependent stages.
+export interface ScheduleActivity {
+  id: string;
+  projectId: string;
+  sequence: number;
+  code: string;
+  name: string;
+  owner: string;
+  status: ActivityStatus;
+  dependsOn: string[]; // ids of predecessor ScheduleActivity records
+  planned: number; // planned progress to date, 0-100
+  actual: number; // actual progress to date, 0-100
+  plannedStart: string;
+  plannedEnd: string;
+  actualStart?: string;
+  delayDays: number; // days slipped against planned finish, 0 if on/ahead of schedule
+  riskReason?: string; // why this stage is flagged at-risk or delayed
+  updates: ExecutionUpdate[];
 }
 
 export type RiskSeverity = "low" | "medium" | "high" | "critical";

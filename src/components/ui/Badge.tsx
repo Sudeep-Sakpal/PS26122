@@ -8,7 +8,7 @@ import type {
   RiskStatus,
 } from "@/types";
 
-type Tone = "neutral" | "info" | "success" | "warning" | "danger";
+export type Tone = "neutral" | "info" | "success" | "warning" | "danger";
 
 const toneClasses: Record<Tone, string> = {
   neutral: "bg-slate-100 text-slate-600 ring-slate-500/15",
@@ -51,7 +51,8 @@ const activityStatusTone: Record<ActivityStatus, Tone> = {
   "not-started": "neutral",
   "in-progress": "info",
   completed: "success",
-  delayed: "warning",
+  delayed: "danger",
+  "at-risk": "warning",
   blocked: "danger",
 };
 
