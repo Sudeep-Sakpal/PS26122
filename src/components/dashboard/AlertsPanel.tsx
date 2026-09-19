@@ -1,5 +1,6 @@
 import Link from "next/link";
-import type { Risk, RiskSeverity, ScheduleActivity } from "@/types";
+import type { ScheduleRisk } from "@/lib/schedule-data";
+import type { Risk, RiskSeverity } from "@/types";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Badge, type Tone } from "@/components/ui/Badge";
 import { AlertIcon } from "@/components/icons";
@@ -27,25 +28,23 @@ const severityTone: Record<RiskSeverity, Tone> = {
   low: "neutral",
 };
 
+// Shares severity, reason, and confidence with the Risks page's schedule
+// risk analysis so the same underlying fact never reads differently in
+// two places.
 export function AlertsPanel({
-  activities,
+  scheduleRisks,
   risks,
 }: {
-  activities: ScheduleActivity[];
+  scheduleRisks: ScheduleRisk[];
   risks: Risk[];
 }) {
-  const cascadeAlerts: Alert[] = activities
-    .filter((a) => a.riskReason && (a.status === "delayed" || a.status === "at-risk"))
-    .map((a) => ({
-      id: `cascade-${a.id}`,
-      title:
-        a.status === "delayed"
-          ? `${a.name} is ${a.delayDays} days behind schedule`
-          : `${a.name} is at risk from an upstream delay`,
-      description: a.riskReason!,
-      severity: a.status === "delayed" ? "high" : "medium",
-      href: `/activities/${a.id}`,
-    }));
+  const cascadeAlerts: Alert[] = scheduleRisks.map((risk) => ({
+    id: risk.id,
+    title: `${risk.trigger.name} is ${risk.trigger.delayDays} days behind schedule`,
+    description: risk.reason,
+    severity: risk.severity,
+    href: `/activities/${risk.trigger.id}`,
+  }));
 
   const registerAlerts: Alert[] = risks
     .filter((r) => r.status !== "closed")
@@ -90,7 +89,7 @@ export function AlertsPanel({
             {alert.href ? (
               <Link
                 href={alert.href}
-                className={cn("block rounded-md -m-1 p-1 hover:bg-slate-50")}
+                className={cn("-m-1 block rounded-md p-1 hover:bg-slate-50")}
               >
                 {content}
               </Link>

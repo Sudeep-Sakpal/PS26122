@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { ALL_PROJECTS_ID, useProjectContext } from "@/context/ProjectContext";
 import { risks } from "@/lib/mock-data";
-import { getScheduleForProject } from "@/lib/schedule-data";
+import { getScheduleForProject, getScheduleRisks } from "@/lib/schedule-data";
 import { StatCard } from "@/components/ui/StatCard";
 import {
   Card,
@@ -30,6 +30,10 @@ export default function DashboardPage() {
   );
   const projectRisks = useMemo(
     () => risks.filter((r) => r.projectId === focusProject.id),
+    [focusProject.id]
+  );
+  const scheduleRisks = useMemo(
+    () => getScheduleRisks(focusProject.id),
     [focusProject.id]
   );
 
@@ -173,7 +177,7 @@ export default function DashboardPage() {
               </CardDescription>
             </div>
           </CardHeader>
-          <AlertsPanel activities={chain} risks={projectRisks} />
+          <AlertsPanel scheduleRisks={scheduleRisks} risks={projectRisks} />
         </Card>
       </div>
 

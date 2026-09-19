@@ -25,22 +25,6 @@ export type ActivityStatus =
   | "at-risk"
   | "blocked";
 
-export interface Activity {
-  id: string;
-  projectId: string;
-  code: string;
-  name: string;
-  wbsPath: string;
-  owner: string;
-  status: ActivityStatus;
-  progress: number; // 0-100
-  plannedStart: string;
-  plannedEnd: string;
-  actualStart?: string;
-  actualEnd?: string;
-  linkedRecords: number;
-}
-
 export interface ExecutionUpdate {
   id: string;
   date: string;

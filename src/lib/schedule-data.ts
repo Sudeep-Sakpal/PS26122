@@ -320,6 +320,8 @@ export const scheduleActivities: ScheduleActivity[] = [
     delayDays: 26,
     riskReason:
       "Lining crews are idle on the disputed stretch; concrete panel output is running at roughly half the planned rate for the quarter.",
+    reportReason: "Lining crew idle time",
+    matchConfidence: 90,
     updates: [
       {
         id: "u-k9-3-1",

@@ -3,7 +3,8 @@
 import { usePathname } from "next/navigation";
 import { navItems } from "@/components/layout/nav-items";
 import { ProjectSelector } from "@/components/layout/ProjectSelector";
-import { BellIcon, MenuIcon, SearchIcon, UserIcon } from "@/components/icons";
+import { GlobalSearch } from "@/components/layout/GlobalSearch";
+import { BellIcon, MenuIcon, UserIcon } from "@/components/icons";
 
 function usePageTitle() {
   const pathname = usePathname();
@@ -31,14 +32,7 @@ export function Header({ onMenuClick }: { onMenuClick: () => void }) {
       </div>
 
       <div className="ml-auto flex items-center gap-3">
-        <div className="relative hidden md:block">
-          <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input
-            type="search"
-            placeholder="Search activities, risks, records…"
-            className="w-64 rounded-md border border-slate-200 bg-slate-50 py-2 pl-8 pr-3 text-sm text-slate-700 placeholder:text-slate-400 focus:border-sky-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-100"
-          />
-        </div>
+        <GlobalSearch />
 
         <ProjectSelector />
 

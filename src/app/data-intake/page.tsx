@@ -1,8 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { ALL_PROJECTS_ID, useProjectContext } from "@/context/ProjectContext";
-import { activities, intakeRecords, intakeSourceLabel, projects } from "@/lib/mock-data";
+import { intakeRecords, intakeSourceLabel, projects } from "@/lib/mock-data";
+import { getScheduleActivity } from "@/lib/schedule-data";
 import type { IntakeStatus } from "@/types";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
@@ -40,9 +42,6 @@ export default function DataIntakePage() {
 
   const projectCode = (projectId: string) =>
     projects.find((p) => p.id === projectId)?.code ?? "—";
-
-  const activityLabel = (activityId?: string) =>
-    activities.find((a) => a.id === activityId)?.code ?? "Unlinked";
 
   return (
     <div>
@@ -122,8 +121,22 @@ export default function DataIntakePage() {
                   <Td>
                     <IntakeStatusBadge status={record.status} />
                   </Td>
-                  <Td className="font-mono text-xs text-slate-500">
-                    {activityLabel(record.linkedActivityId)}
+                  <Td className="font-mono text-xs">
+                    {(() => {
+                      const linked = record.linkedActivityId
+                        ? getScheduleActivity(record.linkedActivityId)
+                        : undefined;
+                      return linked ? (
+                        <Link
+                          href={`/activities/${linked.id}`}
+                          className="text-sky-600 hover:text-sky-700"
+                        >
+                          {linked.code}
+                        </Link>
+                      ) : (
+                        <span className="text-slate-400">Unlinked</span>
+                      );
+                    })()}
                   </Td>
                   <Td className="text-xs text-slate-500">
                     {record.confidence !== undefined
