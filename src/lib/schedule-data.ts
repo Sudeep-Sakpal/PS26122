@@ -24,6 +24,8 @@ export const scheduleActivities: ScheduleActivity[] = [
     delayDays: 18,
     riskReason:
       "Monsoon runoff through late November halted excavation for 9 days; the mandated 72-hour concrete curing cycle pushed pier-cap completion for P5–P7 well past the planned finish.",
+    reportReason: "Heavy rainfall",
+    matchConfidence: 94,
     updates: [
       {
         id: "u-b2-1-3",
@@ -170,6 +172,8 @@ export const scheduleActivities: ScheduleActivity[] = [
     delayDays: 21,
     riskReason:
       "Groundwater ingress at the station box excavation (see risk R-C7-09) has required continuous dewatering, slowing strut installation below Level 3.",
+    reportReason: "Groundwater ingress",
+    matchConfidence: 88,
     updates: [
       {
         id: "u-c7-2-2",
@@ -262,6 +266,8 @@ export const scheduleActivities: ScheduleActivity[] = [
     delayDays: 45,
     riskReason:
       "Ongoing land acquisition dispute along canal RD 15.0 (see risk R-K9-01) has blocked handover of a 2.3 km stretch to the civil contractor.",
+    reportReason: "Land acquisition dispute",
+    matchConfidence: 91,
     updates: [
       {
         id: "u-k9-1-1",
@@ -422,6 +428,8 @@ export const scheduleActivities: ScheduleActivity[] = [
     delayDays: 9,
     riskReason:
       "Forest clearance renewal for the Section 22 corridor (see risk R-S14-03) has restricted access for hardware crews on six of the newly erected towers.",
+    reportReason: "Forest clearance restrictions",
+    matchConfidence: 90,
     updates: [
       {
         id: "u-s14-3-1",
@@ -580,4 +588,66 @@ export function getScheduleActivity(id: string): ScheduleActivity | undefined {
 
 export function variance(activity: ScheduleActivity): number {
   return activity.actual - activity.planned;
+}
+
+// Picks the stage a freshly submitted field report would most plausibly
+// describe: whichever is furthest off-track, in schedule order.
+export function pickReportedActivity(
+  chain: ScheduleActivity[]
+): ScheduleActivity {
+  return (
+    chain.find((a) => a.status === "delayed") ??
+    chain.find((a) => a.status === "at-risk") ??
+    chain.find((a) => a.status === "in-progress") ??
+    chain[0]
+  );
+}
+
+// Walks forward from a stage through its most immediate dependent at each
+// step (the successor with the lowest sequence number), tracing the single
+// consequence line a delay would travel down rather than every branch.
+export function getDownstreamChain(
+  chain: ScheduleActivity[],
+  start: ScheduleActivity
+): ScheduleActivity[] {
+  const result: ScheduleActivity[] = [start];
+  let current = start;
+
+  while (true) {
+    const dependents = chain
+      .filter((a) => a.dependsOn.includes(current.id))
+      .sort((a, b) => a.sequence - b.sequence);
+    if (dependents.length === 0) break;
+    current = dependents[0];
+    result.push(current);
+  }
+
+  return result;
+}
+
+export interface IntakeExtraction {
+  activity: ScheduleActivity;
+  reportDate: string;
+  reportReason: string;
+  confidence: number;
+  downstream: ScheduleActivity[];
+}
+
+// Simulates what an intelligent intake pipeline would surface from a freshly
+// submitted site report: which stage it's about, why, how confident the
+// match is, and which downstream stages inherit the consequence.
+export function buildIntakeExtraction(projectId: string): IntakeExtraction {
+  const chain = getScheduleForProject(projectId);
+  const activity = pickReportedActivity(chain);
+  const reportDate =
+    activity.updates[0]?.date ?? activity.actualStart ?? activity.plannedStart;
+  const reportReason =
+    activity.reportReason ??
+    (activity.status === "delayed" || activity.status === "at-risk"
+      ? "Field conditions below plan"
+      : "On schedule — no issues reported");
+  const confidence = activity.matchConfidence ?? 92;
+  const downstream = getDownstreamChain(chain, activity);
+
+  return { activity, reportDate, reportReason, confidence, downstream };
 }

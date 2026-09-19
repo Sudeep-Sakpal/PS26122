@@ -143,3 +143,50 @@ export function InboxIcon(props: IconProps) {
     </svg>
   );
 }
+
+export function FileIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M7 3.5h7l4 4v11a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 6 18.5v-13A1.5 1.5 0 0 1 7 3.5Z" />
+      <path d="M14 3.5v3.5a1 1 0 0 0 1 1h3.5" />
+      <path d="M9 13.5h6M9 16.5h6" />
+    </svg>
+  );
+}
+
+export function CheckIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M5 12.5 9.5 17 19 6.5" />
+    </svg>
+  );
+}
+
+export function CheckCircleIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="m8.5 12.3 2.3 2.3 4.7-5" />
+    </svg>
+  );
+}
+
+export function UploadCloudIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M7.5 17.5a4 4 0 0 1-.7-7.94A5.5 5.5 0 0 1 17.4 8a4.25 4.25 0 0 1-.4 8.5" />
+      <path d="M12 20v-8" />
+      <path d="M9 14.5 12 11.5 15 14.5" />
+    </svg>
+  );
+}
+
+export function LinkIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M9.5 14.5 14.5 9.5" />
+      <path d="M11 8.5 12.5 7a3 3 0 0 1 4.24 4.24L15.3 12.7" />
+      <path d="M13 15.5 11.5 17a3 3 0 0 1-4.24-4.24L8.7 11.3" />
+    </svg>
+  );
+}

@@ -10,6 +10,7 @@ import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/Table";
 import { IntakeStatusBadge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { IntakeIcon } from "@/components/icons";
+import { IntakeWorkbench } from "@/components/intake/IntakeWorkbench";
 import { cn, formatDate, formatFileSize } from "@/lib/utils";
 
 const filters: Array<{ label: string; value: IntakeStatus | "all" }> = [
@@ -56,18 +57,20 @@ export default function DataIntakePage() {
     <div>
       <PageHeader
         title="Data Intake"
-        description="Field data captured from site reports, drone surveys, sensors, and manual submissions, awaiting schedule linkage."
-        actions={
-          <button
-            disabled
-            title="Ingestion is not enabled in this prototype"
-            className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-md bg-slate-900 px-3 py-2 text-xs font-medium text-white opacity-50"
-          >
-            <IntakeIcon className="h-3.5 w-3.5" />
-            Upload record
-          </button>
-        }
+        description="Upload field data and let the schedule-linking layer match it to your project's execution plan."
       />
+
+      <IntakeWorkbench />
+
+      <div className="mb-4 mt-8">
+        <h3 className="text-sm font-semibold text-slate-900">
+          Submission history
+        </h3>
+        <p className="mt-1 text-xs text-slate-500">
+          Field data captured from site reports, drone surveys, sensors, and
+          manual submissions.
+        </p>
+      </div>
 
       <div className="mb-4 flex flex-wrap gap-1.5">
         {filters.map((f) => (

@@ -69,6 +69,8 @@ export interface ScheduleActivity {
   delayDays: number; // days slipped against planned finish, 0 if on/ahead of schedule
   riskReason?: string; // why this stage is flagged at-risk or delayed
   updates: ExecutionUpdate[];
+  reportReason?: string; // short cause captured from the latest field report
+  matchConfidence?: number; // 0-100, how confidently intake text matched this stage
 }
 
 export type RiskSeverity = "low" | "medium" | "high" | "critical";
