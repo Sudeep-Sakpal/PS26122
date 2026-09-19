@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { ALL_PROJECTS_ID, useProjectContext } from "@/context/ProjectContext";
-import { activities, intakeRecords, projects } from "@/lib/mock-data";
+import { activities, intakeRecords, intakeSourceLabel, projects } from "@/lib/mock-data";
 import type { IntakeStatus } from "@/types";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
@@ -20,15 +20,6 @@ const filters: Array<{ label: string; value: IntakeStatus | "all" }> = [
   { label: "Flagged", value: "flagged" },
   { label: "Processed", value: "processed" },
 ];
-
-const sourceLabel: Record<string, string> = {
-  "site-report": "Site Report",
-  "drone-survey": "Drone Survey",
-  "sensor-feed": "Sensor Feed",
-  "manual-entry": "Manual Entry",
-  email: "Email",
-  spreadsheet: "Spreadsheet",
-};
 
 export default function DataIntakePage() {
   const { selectedProjectId } = useProjectContext();
@@ -119,7 +110,7 @@ export default function DataIntakePage() {
                     {projectCode(record.projectId)}
                   </Td>
                   <Td className="text-slate-500">
-                    {sourceLabel[record.source]}
+                    {intakeSourceLabel[record.source]}
                   </Td>
                   <Td className="text-slate-600">{record.submittedBy}</Td>
                   <Td className="text-xs text-slate-500">

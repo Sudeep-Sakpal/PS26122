@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { ALL_PROJECTS_ID, useProjectContext } from "@/context/ProjectContext";
 import { projects, risks } from "@/lib/mock-data";
+import { getScheduleRisks } from "@/lib/schedule-data";
 import type { RiskStatus } from "@/types";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
@@ -15,6 +16,7 @@ import {
 } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { RisksIcon } from "@/components/icons";
+import { ScheduleRiskAnalysis } from "@/components/risks/ScheduleRiskAnalysis";
 import { cn, formatDate } from "@/lib/utils";
 
 const filters: Array<{ label: string; value: RiskStatus | "all" }> = [
@@ -47,6 +49,14 @@ export default function RisksPage() {
     (r) => r.status === "open" || r.status === "mitigating"
   ).length;
 
+  const scheduleRisks = useMemo(
+    () =>
+      getScheduleRisks(
+        selectedProjectId === ALL_PROJECTS_ID ? undefined : selectedProjectId
+      ),
+    [selectedProjectId]
+  );
+
   const projectCode = (projectId: string) =>
     projects.find((p) => p.id === projectId)?.code ?? "—";
 
@@ -54,8 +64,31 @@ export default function RisksPage() {
     <div>
       <PageHeader
         title="Risks"
-        description="Risk register with severity, likelihood, and linked schedule activities."
+        description="What happened, which activities it affects, and what it could delay next."
       />
+
+      <div className="mb-4">
+        <h3 className="text-sm font-semibold text-slate-900">
+          Schedule risk analysis
+        </h3>
+        <p className="mt-1 text-xs text-slate-500">
+          Risks detected directly from delayed schedule activities, with the
+          downstream activities each one threatens.
+        </p>
+      </div>
+
+      <div className="mb-8">
+        <ScheduleRiskAnalysis risks={scheduleRisks} />
+      </div>
+
+      <div className="mb-4">
+        <h3 className="text-sm font-semibold text-slate-900">
+          Risk register
+        </h3>
+        <p className="mt-1 text-xs text-slate-500">
+          Manually tracked risks with severity, likelihood, and ownership.
+        </p>
+      </div>
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard label="Total risks in scope" value={scoped.length} tone="neutral" />

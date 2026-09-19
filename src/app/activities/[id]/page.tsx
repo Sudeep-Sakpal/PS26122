@@ -1,7 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { projects, risks } from "@/lib/mock-data";
-import { getScheduleActivity, getScheduleForProject } from "@/lib/schedule-data";
+import {
+  getActivitySource,
+  getDownstreamChain,
+  getReportReason,
+  getRootActivity,
+  getScheduleActivity,
+  getScheduleForProject,
+} from "@/lib/schedule-data";
 import {
   Card,
   CardContent,
@@ -11,6 +18,7 @@ import {
 } from "@/components/ui/Card";
 import { ActivityStatusBadge, RiskSeverityBadge } from "@/components/ui/Badge";
 import { PlannedActualBar } from "@/components/dashboard/PlannedActualBar";
+import { DependencyConsequence } from "@/components/intake/DependencyConsequence";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ChevronRightIcon } from "@/components/icons";
 import { formatDate } from "@/lib/utils";
@@ -26,16 +34,13 @@ export default async function ActivityDetailPage({
 
   const project = projects.find((p) => p.id === activity.projectId);
   const chain = getScheduleForProject(activity.projectId);
-  const byId = new Map(chain.map((a) => [a.id, a]));
-
-  const predecessors = activity.dependsOn
-    .map((depId) => byId.get(depId))
-    .filter(Boolean);
-  const successors = chain.filter((a) => a.dependsOn.includes(activity.id));
+  const fullChain = getDownstreamChain(chain, getRootActivity(chain, activity));
   const varianceValue = activity.actual - activity.planned;
   const projectRisks = risks.filter(
     (r) => r.projectId === activity.projectId && r.status !== "closed"
   );
+  const reportReason = getReportReason(activity);
+  const source = getActivitySource(activity);
 
   return (
     <div>
@@ -138,6 +143,20 @@ export default async function ActivityDetailPage({
           <Card>
             <CardHeader>
               <div>
+                <CardTitle>Dependency &amp; risk chain</CardTitle>
+                <CardDescription>
+                  A slip upstream cascades into risk downstream.
+                </CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <DependencyConsequence chain={fullChain} currentId={activity.id} />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div>
                 <CardTitle>Execution updates</CardTitle>
                 <CardDescription>
                   Field reports logged against this stage, most recent first.
@@ -177,13 +196,10 @@ export default async function ActivityDetailPage({
               <CardTitle>Details</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2.5 text-sm">
+              <Row label="Activity ID" value={activity.code} mono />
               <Row label="Owner" value={activity.owner} />
-              <Row
-                label="Planned window"
-                value={`${formatDate(activity.plannedStart)} – ${formatDate(
-                  activity.plannedEnd
-                )}`}
-              />
+              <Row label="Planned start" value={formatDate(activity.plannedStart)} />
+              <Row label="Planned end" value={formatDate(activity.plannedEnd)} />
               <Row
                 label="Actual start"
                 value={
@@ -191,69 +207,33 @@ export default async function ActivityDetailPage({
                 }
               />
               <Row
+                label="Actual end"
+                value={activity.actualEnd ? formatDate(activity.actualEnd) : "—"}
+              />
+              <Row
                 label="Delay"
                 value={activity.delayDays > 0 ? `${activity.delayDays} days` : "None"}
               />
+              <Row label="Execution reason" value={reportReason} />
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Dependency chain</CardTitle>
+              <CardTitle>Source information</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                  Depends on
-                </p>
-                {predecessors.length === 0 ? (
-                  <p className="mt-1 text-slate-500">
-                    No predecessor — this is the first stage.
-                  </p>
-                ) : (
-                  <ul className="mt-1.5 space-y-1.5">
-                    {predecessors.map(
-                      (p) =>
-                        p && (
-                          <li key={p.id}>
-                            <Link
-                              href={`/activities/${p.id}`}
-                              className="flex items-center justify-between rounded-md px-2 py-1.5 -mx-2 hover:bg-slate-50"
-                            >
-                              <span className="text-slate-700">{p.name}</span>
-                              <ActivityStatusBadge status={p.status} />
-                            </Link>
-                          </li>
-                        )
-                    )}
-                  </ul>
-                )}
-              </div>
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                  Blocks
-                </p>
-                {successors.length === 0 ? (
-                  <p className="mt-1 text-slate-500">
-                    No downstream stage depends on this one.
-                  </p>
-                ) : (
-                  <ul className="mt-1.5 space-y-1.5">
-                    {successors.map((s) => (
-                      <li key={s.id}>
-                        <Link
-                          href={`/activities/${s.id}`}
-                          className="flex items-center justify-between rounded-md px-2 py-1.5 -mx-2 hover:bg-slate-50"
-                        >
-                          <span className="text-slate-700">{s.name}</span>
-                          <ActivityStatusBadge status={s.status} />
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </CardContent>
+            {!source ? (
+              <EmptyState
+                title="No field reports yet"
+                description="This stage hasn't received a site update."
+              />
+            ) : (
+              <CardContent className="space-y-2.5 text-sm">
+                <Row label="Source type" value={source.typeLabel} />
+                <Row label="Reference" value={source.reference} mono />
+                <Row label="Match confidence" value={`${source.confidence}%`} />
+              </CardContent>
+            )}
           </Card>
 
           <Card>
@@ -284,11 +264,27 @@ export default async function ActivityDetailPage({
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({
+  label,
+  value,
+  mono,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
   return (
     <div className="flex items-center justify-between gap-3">
-      <span className="text-slate-500">{label}</span>
-      <span className="font-medium text-slate-700">{value}</span>
+      <span className="shrink-0 text-slate-500">{label}</span>
+      <span
+        className={
+          mono
+            ? "truncate font-mono text-xs text-slate-700"
+            : "text-right font-medium text-slate-700"
+        }
+      >
+        {value}
+      </span>
     </div>
   );
 }

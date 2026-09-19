@@ -1,4 +1,5 @@
-import type { ScheduleActivity } from "@/types";
+import { intakeRecords, intakeSourceLabel } from "@/lib/mock-data";
+import type { IntakeSourceType, RiskSeverity, RiskStatus, ScheduleActivity } from "@/types";
 
 // Mock schedule-linked execution chains: one critical-path breakdown per
 // project. This is the core PS 26122 concept in data form — planned vs.
@@ -145,6 +146,7 @@ export const scheduleActivities: ScheduleActivity[] = [
     plannedStart: "2025-08-01",
     plannedEnd: "2025-09-20",
     actualStart: "2025-08-01",
+    actualEnd: "2025-09-18",
     delayDays: 0,
     updates: [
       {
@@ -377,6 +379,7 @@ export const scheduleActivities: ScheduleActivity[] = [
     plannedStart: "2024-11-01",
     plannedEnd: "2025-06-30",
     actualStart: "2024-11-05",
+    actualEnd: "2025-06-28",
     delayDays: 0,
     updates: [
       {
@@ -489,6 +492,7 @@ export const scheduleActivities: ScheduleActivity[] = [
     plannedStart: "2023-06-01",
     plannedEnd: "2023-09-15",
     actualStart: "2023-06-01",
+    actualEnd: "2023-09-10",
     delayDays: 0,
     updates: [],
   },
@@ -506,6 +510,7 @@ export const scheduleActivities: ScheduleActivity[] = [
     plannedStart: "2023-08-01",
     plannedEnd: "2024-04-30",
     actualStart: "2023-08-04",
+    actualEnd: "2024-04-25",
     delayDays: 0,
     updates: [],
   },
@@ -523,6 +528,7 @@ export const scheduleActivities: ScheduleActivity[] = [
     plannedStart: "2024-02-01",
     plannedEnd: "2024-11-30",
     actualStart: "2024-02-05",
+    actualEnd: "2024-11-22",
     delayDays: 0,
     updates: [],
   },
@@ -540,6 +546,7 @@ export const scheduleActivities: ScheduleActivity[] = [
     plannedStart: "2025-04-15",
     plannedEnd: "2025-05-10",
     actualStart: "2025-04-15",
+    actualEnd: "2025-05-08",
     delayDays: 0,
     updates: [
       {
@@ -564,6 +571,7 @@ export const scheduleActivities: ScheduleActivity[] = [
     plannedStart: "2025-04-30",
     plannedEnd: "2025-05-15",
     actualStart: "2025-04-30",
+    actualEnd: "2025-05-15",
     delayDays: 0,
     updates: [
       {
@@ -625,6 +633,60 @@ export function getDownstreamChain(
   return result;
 }
 
+// The short cause behind a stage's latest reported progress — the same
+// fallback used whether it's shown on the activity page or in a fresh
+// intake result.
+export function getReportReason(activity: ScheduleActivity): string {
+  return (
+    activity.reportReason ??
+    (activity.status === "delayed" || activity.status === "at-risk"
+      ? "Field conditions below plan"
+      : "On schedule — no issues reported")
+  );
+}
+
+// Walks backward through dependsOn (always the first predecessor) to find
+// the stage that starts the chain a given activity sits on.
+export function getRootActivity(
+  chain: ScheduleActivity[],
+  activity: ScheduleActivity
+): ScheduleActivity {
+  let current = activity;
+  while (current.dependsOn.length > 0) {
+    const parent = chain.find((a) => a.id === current.dependsOn[0]);
+    if (!parent) break;
+    current = parent;
+  }
+  return current;
+}
+
+export interface ActivitySource {
+  type: IntakeSourceType;
+  typeLabel: string;
+  reference: string;
+  confidence: number;
+}
+
+// Cross-references an activity's latest field update against the intake
+// log to show where its numbers actually came from.
+export function getActivitySource(
+  activity: ScheduleActivity
+): ActivitySource | null {
+  const latest = activity.updates[0];
+  if (!latest) return null;
+
+  const matchedRecord = intakeRecords.find(
+    (r) => r.projectId === activity.projectId && r.submittedOn === latest.date
+  );
+
+  const type: IntakeSourceType = matchedRecord?.source ?? "site-report";
+  const reference = matchedRecord?.fileName ?? `Field update from ${latest.author}`;
+  const confidence =
+    activity.matchConfidence ?? matchedRecord?.confidence ?? 90;
+
+  return { type, typeLabel: intakeSourceLabel[type], reference, confidence };
+}
+
 export interface IntakeExtraction {
   activity: ScheduleActivity;
   reportDate: string;
@@ -641,13 +703,74 @@ export function buildIntakeExtraction(projectId: string): IntakeExtraction {
   const activity = pickReportedActivity(chain);
   const reportDate =
     activity.updates[0]?.date ?? activity.actualStart ?? activity.plannedStart;
-  const reportReason =
-    activity.reportReason ??
-    (activity.status === "delayed" || activity.status === "at-risk"
-      ? "Field conditions below plan"
-      : "On schedule — no issues reported");
+  const reportReason = getReportReason(activity);
   const confidence = activity.matchConfidence ?? 92;
   const downstream = getDownstreamChain(chain, activity);
 
   return { activity, reportDate, reportReason, confidence, downstream };
+}
+
+export interface ScheduleRisk {
+  id: string;
+  projectId: string;
+  trigger: ScheduleActivity;
+  severity: RiskSeverity;
+  reason: string;
+  impacted: ScheduleActivity[];
+  confidence: number;
+  status: RiskStatus;
+}
+
+const severityWeight: Record<RiskSeverity, number> = {
+  critical: 4,
+  high: 3,
+  medium: 2,
+  low: 1,
+};
+
+// Stages whose latest update describes an active workaround rather than a
+// stage that is simply blocked and waiting on an external decision.
+const MITIGATING_TRIGGER_IDS = new Set([
+  "sc-b2-1",
+  "sc-c7-2",
+  "sc-k9-3",
+  "sc-s14-3",
+]);
+
+// Turns every delayed stage with a known cause into a structured schedule
+// risk: what triggered it, why, who it threatens downstream, and how
+// confident the system is in that read — the same cascade the dashboard's
+// alerts summarize, expanded into the full picture.
+export function getScheduleRisks(projectId?: string): ScheduleRisk[] {
+  const pool = projectId
+    ? scheduleActivities.filter((a) => a.projectId === projectId)
+    : scheduleActivities;
+
+  return pool
+    .filter((a) => a.status === "delayed" && a.riskReason)
+    .map((trigger) => {
+      const chain = getScheduleForProject(trigger.projectId);
+      const impacted = getDownstreamChain(chain, trigger).slice(1);
+      const severity: RiskSeverity =
+        trigger.delayDays >= 30
+          ? "critical"
+          : trigger.delayDays >= 14
+            ? "high"
+            : "medium";
+      const status: RiskStatus = MITIGATING_TRIGGER_IDS.has(trigger.id)
+        ? "mitigating"
+        : "open";
+
+      return {
+        id: `sr-${trigger.id}`,
+        projectId: trigger.projectId,
+        trigger,
+        severity,
+        reason: trigger.riskReason!,
+        impacted,
+        confidence: trigger.matchConfidence ?? 90,
+        status,
+      };
+    })
+    .sort((a, b) => severityWeight[b.severity] - severityWeight[a.severity]);
 }

@@ -66,6 +66,7 @@ export interface ScheduleActivity {
   plannedStart: string;
   plannedEnd: string;
   actualStart?: string;
+  actualEnd?: string;
   delayDays: number; // days slipped against planned finish, 0 if on/ahead of schedule
   riskReason?: string; // why this stage is flagged at-risk or delayed
   updates: ExecutionUpdate[];

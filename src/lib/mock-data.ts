@@ -1,12 +1,22 @@
 import type {
   Activity,
   DataIntakeRecord,
+  IntakeSourceType,
   Project,
   Risk,
 } from "@/types";
 
 // Static mock data for the frontend prototype. Shapes match the
 // contracts future backend APIs are expected to fulfill.
+
+export const intakeSourceLabel: Record<IntakeSourceType, string> = {
+  "site-report": "Site Report",
+  "drone-survey": "Drone Survey",
+  "sensor-feed": "Sensor Feed",
+  "manual-entry": "Manual Entry",
+  email: "Email",
+  spreadsheet: "Spreadsheet",
+};
 
 export const projects: Project[] = [
   {
