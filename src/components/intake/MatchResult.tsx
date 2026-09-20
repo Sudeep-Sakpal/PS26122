@@ -1,6 +1,6 @@
 import Link from "next/link";
-import type { ScheduleActivity } from "@/types";
-import { ActivityStatusBadge } from "@/components/ui/Badge";
+import type { ActivityComparison } from "@/lib/api/activities";
+import { DelayStatusBadge } from "@/components/ui/Badge";
 import { PlannedActualBar } from "@/components/dashboard/PlannedActualBar";
 import { ChevronRightIcon, LinkIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
@@ -24,14 +24,26 @@ function Stat({
   );
 }
 
+// Driven entirely by a real B3 match result (POST .../execution-updates/:id/link)
+// and, once it resolves, the matched activity's real B3 comparison
+// (GET .../activities/:activityId/comparison) — `comparison` is `null`
+// until that second call finishes, so the planned/actual/variance section
+// is simply omitted rather than showing a fabricated placeholder.
 export function MatchResult({
-  activity,
+  activityId,
+  activityCode,
+  activityName,
   confidence,
+  matchMethod,
+  comparison,
 }: {
-  activity: ScheduleActivity;
+  activityId: string;
+  activityCode: string;
+  activityName: string;
   confidence: number;
+  matchMethod: string;
+  comparison: ActivityComparison | null;
 }) {
-  const varianceValue = activity.actual - activity.planned;
   const confidenceTone =
     confidence >= 90
       ? "text-emerald-600"
@@ -39,11 +51,13 @@ export function MatchResult({
         ? "text-amber-600"
         : "text-rose-600";
   const varianceTone =
-    varianceValue >= 0
-      ? "text-emerald-600"
-      : varianceValue >= -10
-        ? "text-amber-600"
-        : "text-rose-600";
+    comparison && comparison.variance !== null
+      ? comparison.variance >= 0
+        ? "text-emerald-600"
+        : comparison.variance >= -10
+          ? "text-amber-600"
+          : "text-rose-600"
+      : undefined;
 
   return (
     <div>
@@ -54,9 +68,11 @@ export function MatchResult({
           </span>
           <div>
             <p className="text-sm font-semibold text-slate-800">
-              {activity.code} — {activity.name}
+              {activityCode} — {activityName}
             </p>
-            <p className="text-xs text-slate-500">Matched schedule activity</p>
+            <p className="text-xs text-slate-500">
+              Matched via <span className="font-mono">{matchMethod}</span>
+            </p>
           </div>
         </div>
         <div className="text-right">
@@ -67,33 +83,48 @@ export function MatchResult({
         </div>
       </div>
 
-      <PlannedActualBar
-        planned={activity.planned}
-        actual={activity.actual}
-        size="lg"
-        showLabels
-        className="mt-5"
-      />
+      {comparison && (
+        <>
+          <PlannedActualBar
+            planned={comparison.plannedProgress}
+            actual={comparison.actualProgress ?? 0}
+            size="lg"
+            showLabels
+            className="mt-5"
+          />
 
-      <div className="mt-5 grid grid-cols-3 gap-4 text-center">
-        <Stat label="Planned" value={`${activity.planned}%`} />
-        <Stat label="Actual" value={`${activity.actual}%`} />
-        <Stat
-          label="Variance"
-          value={`${varianceValue > 0 ? "+" : ""}${varianceValue}%`}
-          tone={varianceTone}
-        />
-      </div>
+          <div className="mt-5 grid grid-cols-3 gap-4 text-center">
+            <Stat label="Planned" value={`${comparison.plannedProgress}%`} />
+            <Stat
+              label="Actual"
+              value={
+                comparison.actualProgress !== null
+                  ? `${comparison.actualProgress}%`
+                  : "—"
+              }
+            />
+            <Stat
+              label="Variance"
+              value={
+                comparison.variance !== null
+                  ? `${comparison.variance > 0 ? "+" : ""}${comparison.variance}%`
+                  : "—"
+              }
+              tone={varianceTone}
+            />
+          </div>
 
-      <div className="mt-5 flex items-center justify-between rounded-md bg-slate-50 px-3 py-2.5">
-        <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
-          Resulting status
-        </span>
-        <ActivityStatusBadge status={activity.status} />
-      </div>
+          <div className="mt-5 flex items-center justify-between rounded-md bg-slate-50 px-3 py-2.5">
+            <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              Resulting status
+            </span>
+            <DelayStatusBadge status={comparison.status} />
+          </div>
+        </>
+      )}
 
       <Link
-        href={`/activities/${activity.id}`}
+        href={`/activities/${activityId}`}
         className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-sky-600 hover:text-sky-700"
       >
         View full activity

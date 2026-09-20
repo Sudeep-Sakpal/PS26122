@@ -2,17 +2,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { risks } from "@/lib/mock-data";
 import { ApiError } from "@/lib/api/client";
+import { fetchProjectActivities, fetchProjects } from "@/lib/api/projects";
+import { fetchExecutionUpdates } from "@/lib/api/reports";
 import {
-  fetchActivityDetail,
-  fetchProjectActivities,
-  fetchProjects,
-} from "@/lib/api/projects";
-import {
-  getActivitySource,
-  getDownstreamChain,
-  getReportReason,
-  getRootActivity,
-} from "@/lib/schedule-data";
+  fetchActivityIntelligence,
+  type ActivityComparison,
+} from "@/lib/api/activities";
+import { getDownstreamChain, getRootActivity } from "@/lib/schedule-data";
 import {
   Card,
   CardContent,
@@ -20,12 +16,28 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/Card";
-import { ActivityStatusBadge, RiskSeverityBadge } from "@/components/ui/Badge";
+import {
+  ActivityStatusBadge,
+  DelayStatusBadge,
+  RiskSeverityBadge,
+} from "@/components/ui/Badge";
 import { PlannedActualBar } from "@/components/dashboard/PlannedActualBar";
 import { DependencyConsequence } from "@/components/intake/DependencyConsequence";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ChevronRightIcon } from "@/components/icons";
 import { formatDate } from "@/lib/utils";
+
+// B3 always returns a real `reason` alongside a DELAYED/AHEAD comparison
+// (it comes straight from the linked report); the fallbacks below only
+// ever describe a genuinely reason-less real state (no link yet, or on
+// schedule), never a guess at "what probably happened".
+function describeComparisonReason(comparison: ActivityComparison): string {
+  if (comparison.reason) return comparison.reason;
+  if (comparison.status === "NO_DATA") return "No execution update linked yet.";
+  if (comparison.status === "ON_TRACK") return "On schedule — no issues reported.";
+  if (comparison.status === "AHEAD") return "Ahead of schedule — no issues reported.";
+  return "No reason provided in the linked report.";
+}
 
 export default async function ActivityDetailPage({
   params,
@@ -42,9 +54,10 @@ export default async function ActivityDetailPage({
   // a 400/404 just means "not this project", anything else is a real
   // failure and should surface as an error state, not a false not-found.
   let ownerProjectId: string | null = null;
+  let intelligence: Awaited<ReturnType<typeof fetchActivityIntelligence>> | null = null;
   for (const candidate of projects) {
     try {
-      await fetchActivityDetail(candidate.id, id);
+      intelligence = await fetchActivityIntelligence(candidate.id, id);
       ownerProjectId = candidate.id;
       break;
     } catch (err) {
@@ -54,20 +67,25 @@ export default async function ActivityDetailPage({
       throw err;
     }
   }
-  if (!ownerProjectId) notFound();
+  if (!ownerProjectId || !intelligence) notFound();
 
-  const chain = await fetchProjectActivities(ownerProjectId);
+  const [chain, executionUpdates] = await Promise.all([
+    fetchProjectActivities(ownerProjectId),
+    fetchExecutionUpdates(ownerProjectId),
+  ]);
   const activity = chain.find((a) => a.id === id);
   if (!activity) notFound();
 
   const project = projects.find((p) => p.id === activity.projectId);
   const fullChain = getDownstreamChain(chain, getRootActivity(chain, activity));
-  const varianceValue = activity.actual - activity.planned;
+  const comparison = intelligence.comparison;
   const projectRisks = risks.filter(
     (r) => r.projectId === activity.projectId && r.status !== "closed"
   );
-  const reportReason = getReportReason(activity);
-  const source = getActivitySource(activity);
+  const reasonText = describeComparisonReason(comparison);
+  const activityUpdates = executionUpdates
+    .filter((u) => u.linkedActivityId === activity.id)
+    .sort((a, b) => (a.date < b.date ? 1 : -1));
 
   return (
     <div>
@@ -113,24 +131,27 @@ export default async function ActivityDetailPage({
                   Variance drives delay; delay cascades into downstream risk.
                 </CardDescription>
               </div>
+              <DelayStatusBadge status={comparison.status} />
             </CardHeader>
             <CardContent>
               <PlannedActualBar
-                planned={activity.planned}
-                actual={activity.actual}
+                planned={comparison.plannedProgress}
+                actual={comparison.actualProgress ?? 0}
                 size="lg"
                 showLabels
               />
               <div className="mt-5 grid grid-cols-3 gap-4 text-center">
                 <div>
                   <p className="text-2xl font-semibold tabular-nums text-slate-900">
-                    {activity.planned}%
+                    {comparison.plannedProgress}%
                   </p>
                   <p className="text-xs text-slate-500">Planned</p>
                 </div>
                 <div>
                   <p className="text-2xl font-semibold tabular-nums text-slate-900">
-                    {activity.actual}%
+                    {comparison.actualProgress !== null
+                      ? `${comparison.actualProgress}%`
+                      : "—"}
                   </p>
                   <p className="text-xs text-slate-500">Actual</p>
                 </div>
@@ -138,29 +159,32 @@ export default async function ActivityDetailPage({
                   <p
                     className={
                       "text-2xl font-semibold tabular-nums " +
-                      (varianceValue >= 0
-                        ? "text-emerald-600"
-                        : varianceValue >= -10
-                          ? "text-amber-600"
-                          : "text-rose-600")
+                      (comparison.variance === null
+                        ? "text-slate-400"
+                        : comparison.variance >= 0
+                          ? "text-emerald-600"
+                          : comparison.variance >= -10
+                            ? "text-amber-600"
+                            : "text-rose-600")
                     }
                   >
-                    {varianceValue > 0 ? "+" : ""}
-                    {varianceValue}%
+                    {comparison.variance !== null
+                      ? `${comparison.variance > 0 ? "+" : ""}${comparison.variance}%`
+                      : "—"}
                   </p>
                   <p className="text-xs text-slate-500">Variance</p>
                 </div>
               </div>
 
-              {activity.riskReason && (
+              {comparison.status === "DELAYED" && comparison.reason && (
                 <div className="mt-5 rounded-md border border-amber-200 bg-amber-50 px-4 py-3">
                   <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
-                    {activity.status === "delayed"
+                    {activity.delayDays > 0
                       ? `${activity.delayDays}-day slip`
-                      : "Downstream risk"}
+                      : "Delayed"}
                   </p>
                   <p className="mt-1 text-sm text-amber-900">
-                    {activity.riskReason}
+                    {comparison.reason}
                   </p>
                 </div>
               )}
@@ -190,25 +214,25 @@ export default async function ActivityDetailPage({
                 </CardDescription>
               </div>
             </CardHeader>
-            {activity.updates.length === 0 ? (
+            {activityUpdates.length === 0 ? (
               <EmptyState
                 title="No updates yet"
                 description="This stage hasn't started reporting field progress."
               />
             ) : (
               <ul className="divide-y divide-slate-100">
-                {activity.updates.map((update) => (
+                {activityUpdates.map((update) => (
                   <li key={update.id} className="px-5 py-3">
                     <div className="flex items-center justify-between gap-2">
-                      <p className="text-xs font-semibold text-slate-700">
-                        {update.author}
-                      </p>
                       <span className="text-[11px] text-slate-400">
                         {formatDate(update.date)}
                       </span>
+                      <span className="text-xs font-semibold tabular-nums text-slate-700">
+                        {update.actualProgress}%
+                      </span>
                     </div>
                     <p className="mt-1 text-sm text-slate-600">
-                      {update.note}
+                      {update.reason || "—"}
                     </p>
                   </li>
                 ))}
@@ -241,7 +265,7 @@ export default async function ActivityDetailPage({
                 label="Delay"
                 value={activity.delayDays > 0 ? `${activity.delayDays} days` : "None"}
               />
-              <Row label="Execution reason" value={reportReason} />
+              <Row label="Execution reason" value={reasonText} />
             </CardContent>
           </Card>
 
@@ -249,16 +273,27 @@ export default async function ActivityDetailPage({
             <CardHeader>
               <CardTitle>Source information</CardTitle>
             </CardHeader>
-            {!source ? (
+            {!intelligence.source ? (
               <EmptyState
                 title="No field reports yet"
                 description="This stage hasn't received a site update."
               />
             ) : (
               <CardContent className="space-y-2.5 text-sm">
-                <Row label="Source type" value={source.typeLabel} />
-                <Row label="Reference" value={source.reference} mono />
-                <Row label="Match confidence" value={`${source.confidence}%`} />
+                <Row label="Report file" value={intelligence.source.fileName} mono />
+                <Row
+                  label="File type"
+                  value={intelligence.source.fileType.toUpperCase()}
+                />
+                {comparison.matchConfidence !== undefined && (
+                  <Row
+                    label="Match confidence"
+                    value={`${comparison.matchConfidence}%`}
+                  />
+                )}
+                {comparison.matchMethod && (
+                  <Row label="Match method" value={comparison.matchMethod} mono />
+                )}
               </CardContent>
             )}
           </Card>

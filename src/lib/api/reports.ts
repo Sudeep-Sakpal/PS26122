@@ -168,3 +168,51 @@ export async function fetchExecutionUpdates(projectId: string): Promise<Executio
   const raw = await apiFetch<RawExecutionUpdate[]>(`/projects/${projectId}/execution-updates`);
   return raw.map(mapExecutionUpdate);
 }
+
+// B3's deterministic schedule-matching outcome (see
+// backend/src/services/scheduleMatching.service.ts). Never forced — an
+// unmatched result is a genuine, real outcome, not an error, and always
+// carries a real reason from the backend rather than a guess.
+export type MatchMethod = "exact-code" | "exact-name" | "keyword" | "fuzzy";
+
+export interface MatchedOutcome {
+  matched: true;
+  executionUpdateId: string;
+  activityId: string;
+  activityCode: string;
+  activityName: string;
+  confidence: number;
+  matchMethod: MatchMethod;
+}
+
+export interface UnmatchedOutcome {
+  matched: false;
+  executionUpdateId: string;
+  reason: string;
+}
+
+export type MatchOutcome = MatchedOutcome | UnmatchedOutcome;
+
+interface RawLinkResponse {
+  executionUpdate: RawExecutionUpdate;
+  match: MatchOutcome;
+}
+
+export interface LinkResult {
+  executionUpdate: ExecutionUpdate;
+  match: MatchOutcome;
+}
+
+export async function linkExecutionUpdate(
+  projectId: string,
+  updateId: string
+): Promise<LinkResult> {
+  const raw = await apiFetch<RawLinkResponse>(
+    `/projects/${projectId}/execution-updates/${updateId}/link`,
+    { method: "POST" }
+  );
+  return {
+    executionUpdate: mapExecutionUpdate(raw.executionUpdate),
+    match: raw.match,
+  };
+}

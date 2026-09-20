@@ -7,6 +7,7 @@ import type {
   RiskSeverity,
   RiskStatus,
 } from "@/types";
+import type { DelayStatus } from "@/lib/api/activities";
 
 export type Tone = "neutral" | "info" | "success" | "warning" | "danger";
 
@@ -84,6 +85,22 @@ const intakeStatusTone: Record<IntakeStatus, Tone> = {
   processed: "neutral",
 };
 
+// B3's planned-vs-actual comparison result — a distinct vocabulary from
+// ActivityStatus (B1's static schedule-import status); see backend/API.md.
+const delayStatusTone: Record<DelayStatus, Tone> = {
+  DELAYED: "danger",
+  ON_TRACK: "success",
+  AHEAD: "info",
+  NO_DATA: "neutral",
+};
+
+const delayStatusLabel: Record<DelayStatus, string> = {
+  DELAYED: "Delayed",
+  ON_TRACK: "On Track",
+  AHEAD: "Ahead",
+  NO_DATA: "No Data",
+};
+
 function label(value: string) {
   return value
     .split("-")
@@ -113,4 +130,8 @@ export function RiskLikelihoodBadge({ likelihood }: { likelihood: RiskLikelihood
 
 export function IntakeStatusBadge({ status }: { status: IntakeStatus }) {
   return <Badge tone={intakeStatusTone[status]}>{label(status)}</Badge>;
+}
+
+export function DelayStatusBadge({ status }: { status: DelayStatus }) {
+  return <Badge tone={delayStatusTone[status]}>{delayStatusLabel[status]}</Badge>;
 }

@@ -1,8 +1,13 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useProjectContext } from "@/context/ProjectContext";
-import { uploadReport, type UploadReportResult } from "@/lib/api/reports";
+import {
+  linkExecutionUpdate,
+  uploadReport,
+  type UploadReportResult,
+} from "@/lib/api/reports";
+import { fetchActivityComparison, type ActivityComparison } from "@/lib/api/activities";
 import { ApiError } from "@/lib/api/client";
 import { cn } from "@/lib/utils";
 import {
@@ -17,6 +22,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { FileDropzone } from "@/components/intake/FileDropzone";
 import { ProcessingSteps } from "@/components/intake/ProcessingSteps";
 import { ExtractionResult } from "@/components/intake/ExtractionResult";
+import { MatchResult } from "@/components/intake/MatchResult";
 import { CheckCircleIcon } from "@/components/icons";
 
 const ALLOWED_EXTENSIONS = [".txt", ".pdf", ".xlsx"];
@@ -35,6 +41,24 @@ function validateReportFile(file: File): string | null {
 
 type Phase = "idle" | "processing" | "done" | "error";
 
+// Per-execution-update schedule-linking state, driven entirely by real
+// B3 responses. "unmatched" is a genuine backend outcome (no confident
+// match), never an error.
+type UpdateMatchState =
+  | { kind: "unlinked" }
+  | { kind: "linking" }
+  | {
+      kind: "matched";
+      activityId: string;
+      activityCode: string;
+      activityName: string;
+      confidence: number;
+      matchMethod: string;
+      comparison: ActivityComparison | null;
+    }
+  | { kind: "unmatched"; reason: string }
+  | { kind: "link-error"; message: string };
+
 export function IntakeWorkbench({ onUploaded }: { onUploaded?: () => void }) {
   const { projects, selectedProject } = useProjectContext();
   const focusProject = selectedProject ?? projects[0];
@@ -49,12 +73,33 @@ export function IntakeWorkbench({ onUploaded }: { onUploaded?: () => void }) {
 
   const [phase, setPhase] = useState<Phase>("idle");
   const [stepIndex, setStepIndex] = useState(0);
-  const [doneCount, setDoneCount] = useState<number | null>(null);
   const [result, setResult] = useState<UploadReportResult | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [matchStates, setMatchStates] = useState<Record<string, UpdateMatchState>>({});
   const cancelledRef = useRef(false);
 
   const canProcess = phase === "idle" && !!reportFile && !fileError;
+
+  // "Reading document" and "Extracting information" always ran once the
+  // upload succeeds. "Identifying activity" only genuinely happened if
+  // extraction produced an update to report on. "Linking to schedule" and
+  // "Comparing planned vs. actual" only advance once the user explicitly
+  // runs matching and it actually succeeds — "Detecting downstream risk"
+  // is never marked done here; that's I5.
+  const matchStateList = Object.values(matchStates);
+  const anyMatched = matchStateList.some((s) => s.kind === "matched");
+  const anyComparisonLoaded = matchStateList.some(
+    (s) => s.kind === "matched" && s.comparison !== null
+  );
+  const doneCount = !result
+    ? null
+    : anyComparisonLoaded
+      ? 5
+      : anyMatched
+        ? 4
+        : result.executionUpdates.length > 0
+          ? 3
+          : 2;
 
   function selectReportFile(file: File) {
     const validationError = validateReportFile(file);
@@ -72,9 +117,9 @@ export function IntakeWorkbench({ onUploaded }: { onUploaded?: () => void }) {
     cancelledRef.current = false;
     setResult(null);
     setUploadError(null);
+    setMatchStates({});
     setPhase("processing");
     setStepIndex(0);
-    setDoneCount(null);
 
     // Cosmetic only: both labels genuinely describe what the single
     // backend request is doing while it's in flight, but the frontend has
@@ -88,12 +133,9 @@ export function IntakeWorkbench({ onUploaded }: { onUploaded?: () => void }) {
       clearTimeout(stepTimer);
       if (cancelledRef.current) return;
       setResult(uploadResult);
-      // "Reading document" and "Extracting information" always ran.
-      // "Identifying activity" only genuinely happened if extraction
-      // actually produced an execution update to report on. Schedule
-      // linking, comparison, and risk detection are never performed by
-      // this endpoint, so those steps are deliberately left pending.
-      setDoneCount(uploadResult.executionUpdates.length > 0 ? 3 : 2);
+      setMatchStates(
+        Object.fromEntries(uploadResult.executionUpdates.map((u) => [u.id, { kind: "unlinked" } as UpdateMatchState]))
+      );
       setPhase("done");
       onUploaded?.();
     } catch (err) {
@@ -108,17 +150,82 @@ export function IntakeWorkbench({ onUploaded }: { onUploaded?: () => void }) {
     }
   }
 
-  function reset() {
+  async function initiateLink(updateId: string) {
+    if (!focusProject) return;
+    setMatchStates((prev) => ({ ...prev, [updateId]: { kind: "linking" } }));
+
+    try {
+      const linkResult = await linkExecutionUpdate(focusProject.id, updateId);
+      const match = linkResult.match;
+
+      if (!match.matched) {
+        setMatchStates((prev) => ({
+          ...prev,
+          [updateId]: { kind: "unmatched", reason: match.reason },
+        }));
+        return;
+      }
+
+      const { activityId, activityCode, activityName, confidence, matchMethod } = match;
+      setMatchStates((prev) => ({
+        ...prev,
+        [updateId]: {
+          kind: "matched",
+          activityId,
+          activityCode,
+          activityName,
+          confidence,
+          matchMethod,
+          comparison: null,
+        },
+      }));
+
+      try {
+        const comparison = await fetchActivityComparison(focusProject.id, activityId);
+        setMatchStates((prev) => {
+          const current = prev[updateId];
+          if (!current || current.kind !== "matched") return prev;
+          return { ...prev, [updateId]: { ...current, comparison } };
+        });
+      } catch {
+        // The link itself succeeded and is shown; the comparison section
+        // is simply left out rather than shown as broken.
+      }
+    } catch (err) {
+      setMatchStates((prev) => ({
+        ...prev,
+        [updateId]: {
+          kind: "link-error",
+          message: err instanceof Error ? err.message : "Linking failed.",
+        },
+      }));
+    }
+  }
+
+  const reset = useCallback(() => {
     cancelledRef.current = true;
     setScheduleFile(null);
     setReportFile(null);
     setFileError(null);
     setPhase("idle");
     setStepIndex(0);
-    setDoneCount(null);
     setResult(null);
     setUploadError(null);
-  }
+    setMatchStates({});
+  }, []);
+
+  // A stale result/match-in-progress from a different project must never
+  // stay actionable after switching — otherwise "Link to schedule" could
+  // fire against the newly-selected project's id for an execution update
+  // that belongs to the previous one.
+  const activeProjectId = focusProject?.id;
+  const previousProjectIdRef = useRef(activeProjectId);
+  useEffect(() => {
+    if (previousProjectIdRef.current !== activeProjectId) {
+      previousProjectIdRef.current = activeProjectId;
+      reset();
+    }
+  }, [activeProjectId, reset]);
 
   if (!focusProject) {
     return (
@@ -290,16 +397,72 @@ export function IntakeWorkbench({ onUploaded }: { onUploaded?: () => void }) {
                 <div>
                   <CardTitle>Schedule match</CardTitle>
                   <CardDescription>
-                    Linking this update to a schedule activity happens in a
-                    later step.
+                    Link each extracted update to a real schedule activity.
                   </CardDescription>
                 </div>
               </CardHeader>
-              <CardContent>
-                <EmptyState
-                  title="Not yet linked to a schedule activity"
-                  description="Schedule matching runs as a separate step after ingestion."
-                />
+              <CardContent className="space-y-5">
+                {result.executionUpdates.map((update) => {
+                  const state = matchStates[update.id] ?? { kind: "unlinked" as const };
+
+                  return (
+                    <div key={update.id}>
+                      {result.executionUpdates.length > 1 && (
+                        <p className="mb-2 text-xs font-medium text-slate-500">
+                          {update.activityName}
+                        </p>
+                      )}
+
+                      {state.kind === "unlinked" && (
+                        <EmptyState
+                          title="Not yet linked to a schedule activity"
+                          description="Run schedule matching to find the real activity this update describes."
+                          action={
+                            <button
+                              onClick={() => initiateLink(update.id)}
+                              className="rounded-md bg-slate-900 px-4 py-2 text-xs font-medium text-white hover:bg-slate-800"
+                            >
+                              Link to schedule
+                            </button>
+                          }
+                        />
+                      )}
+
+                      {state.kind === "linking" && (
+                        <div className="flex items-center justify-center gap-2 px-5 py-8 text-sm text-slate-500">
+                          <span className="h-2 w-2 animate-spin rounded-full border-[1.5px] border-sky-600 border-t-transparent" />
+                          Matching against the schedule…
+                        </div>
+                      )}
+
+                      {state.kind === "matched" && (
+                        <MatchResult
+                          activityId={state.activityId}
+                          activityCode={state.activityCode}
+                          activityName={state.activityName}
+                          confidence={state.confidence}
+                          matchMethod={state.matchMethod}
+                          comparison={state.comparison}
+                        />
+                      )}
+
+                      {state.kind === "unmatched" && (
+                        <EmptyState
+                          title="No confident schedule match found"
+                          description={state.reason}
+                        />
+                      )}
+
+                      {state.kind === "link-error" && (
+                        <ErrorState
+                          title="Linking failed"
+                          description={state.message}
+                          onRetry={() => initiateLink(update.id)}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
               </CardContent>
             </Card>
           )}

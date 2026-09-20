@@ -92,34 +92,7 @@ export async function fetchProjectActivities(
   return raw.map(mapActivity).sort((a, b) => a.sequence - b.sequence);
 }
 
-// GET /projects/:id/activities/:activityId also returns `comparison` (B3)
-// and `source` (linked report) — intentionally left untyped/unused here.
-// Wiring those in is a later integration milestone (I4), not I1; this is
-// used only to resolve which project owns an activity id and to confirm
-// the activity actually exists (404 => not found).
-export interface ActivityDetailResponse {
-  activity: {
-    _id: string;
-    project: string;
-    sequence: number;
-    code: string;
-    name: string;
-    owner: string;
-    status: ScheduleActivity["status"];
-    plannedStart: string;
-    plannedEnd: string;
-    actualStart?: string;
-    actualEnd?: string;
-    delayDays: number;
-    dependsOn: string[];
-  };
-}
-
-export async function fetchActivityDetail(
-  projectId: string,
-  activityId: string
-): Promise<ActivityDetailResponse> {
-  return apiFetch<ActivityDetailResponse>(
-    `/projects/${projectId}/activities/${activityId}`
-  );
-}
+// The full GET /projects/:id/activities/:activityId response (identity +
+// B3 comparison + source report) is now mapped in @/lib/api/activities
+// (fetchActivityIntelligence) — that supersedes this module's narrower,
+// identity-only version from I1.
