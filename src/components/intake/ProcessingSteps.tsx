@@ -12,16 +12,27 @@ export const PROCESSING_STEPS = [
 
 export function ProcessingSteps({
   currentIndex,
-  complete,
+  doneCount,
 }: {
+  /** Which step to animate as "active" while a request is still in flight. */
   currentIndex: number;
-  complete: boolean;
+  /**
+   * Once the backend has responded, how many leading steps it actually
+   * completed (exclusive upper bound) — `null` while still waiting. Steps
+   * at or beyond this count are left in their pending state rather than
+   * marked done, since I3 only performs ingestion + extraction; schedule
+   * linking, comparison, and risk detection are later integration steps
+   * that this response never claims to have run.
+   */
+  doneCount: number | null;
 }) {
+  const finished = doneCount !== null;
+
   return (
     <ol>
       {PROCESSING_STEPS.map((label, index) => {
-        const isDone = complete || index < currentIndex;
-        const isActive = !complete && index === currentIndex;
+        const isDone = finished ? index < doneCount : index < currentIndex;
+        const isActive = !finished && index === currentIndex;
 
         return (
           <li key={label} className="flex items-center gap-3 py-1.5">
@@ -61,7 +72,7 @@ export function ProcessingSteps({
                 Processing…
               </span>
             )}
-            {isDone && !complete && (
+            {isDone && !finished && (
               <span className="ml-auto text-xs text-emerald-600">Done</span>
             )}
           </li>

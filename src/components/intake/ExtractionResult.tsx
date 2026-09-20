@@ -1,4 +1,3 @@
-import type { ScheduleActivity } from "@/types";
 import { formatDate } from "@/lib/utils";
 
 function Field({ label, value }: { label: string; value: string }) {
@@ -12,21 +11,38 @@ function Field({ label, value }: { label: string; value: string }) {
   );
 }
 
+// Driven by one real extracted ExecutionUpdate (POST /projects/:id/reports)
+// — every field here is either present in that response or shown as "—",
+// never invented. `confidence` is omitted entirely (not shown as "—")
+// when the extractor didn't report one, since that's a different fact
+// than "reported a zero".
 export function ExtractionResult({
-  activity,
+  activityName,
+  activityCode,
   reportDate,
-  reportReason,
+  actualProgress,
+  reason,
+  confidence,
 }: {
-  activity: ScheduleActivity;
+  activityName: string;
+  activityCode?: string;
   reportDate: string;
-  reportReason: string;
+  actualProgress: number;
+  reason: string;
+  confidence?: number;
 }) {
   return (
     <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-      <Field label="Activity" value={activity.name} />
+      <Field
+        label="Activity"
+        value={activityCode ? `${activityName} (${activityCode})` : activityName}
+      />
       <Field label="Report date" value={formatDate(reportDate)} />
-      <Field label="Actual progress" value={`${activity.actual}%`} />
-      <Field label="Reason" value={reportReason} />
+      <Field label="Actual progress" value={`${actualProgress}%`} />
+      <Field label="Reason" value={reason || "—"} />
+      {confidence !== undefined && (
+        <Field label="Extraction confidence" value={`${confidence}%`} />
+      )}
     </dl>
   );
 }

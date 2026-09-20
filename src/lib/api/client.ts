@@ -36,7 +36,12 @@ export async function apiFetch<T>(
       ...init,
       headers: {
         Accept: "application/json",
-        ...(init?.body ? { "Content-Type": "application/json" } : {}),
+        // FormData bodies (file uploads) must NOT get a JSON content-type —
+        // the browser sets its own multipart/form-data boundary, and
+        // overriding it here would break the upload.
+        ...(init?.body && !(init.body instanceof FormData)
+          ? { "Content-Type": "application/json" }
+          : {}),
         ...init?.headers,
       },
     });
