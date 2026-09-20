@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
 import { ApiError } from "../utils/ApiError";
+import { cellToPrimitive, loadWorkbookBuffer } from "../utils/xlsxCell";
 
 export type RawScheduleRow = Record<string, unknown>;
 
@@ -66,33 +67,12 @@ function normalizeHeader(raw: string): string | undefined {
   return HEADER_ALIASES[key];
 }
 
-function cellToPrimitive(cell: ExcelJS.Cell): unknown {
-  const value = cell.value;
-  if (value === null || value === undefined) return undefined;
-  if (value instanceof Date) return value;
-  if (typeof value === "object") {
-    if ("result" in value) return (value as { result: unknown }).result;
-    if ("text" in value) return (value as { text: unknown }).text;
-    if ("richText" in value) {
-      return (value as { richText: Array<{ text: string }> }).richText
-        .map((t) => t.text)
-        .join("");
-    }
-    return undefined;
-  }
-  return value;
-}
-
 export async function parseScheduleWorkbook(
   buffer: Buffer
 ): Promise<RawScheduleRow[]> {
   const workbook = new ExcelJS.Workbook();
   try {
-    // exceljs's declared Buffer parameter type doesn't line up with the
-    // installed @types/node's generic Buffer<T>; the value is a plain
-    // Buffer at runtime either way.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await workbook.xlsx.load(buffer as any);
+    await loadWorkbookBuffer(workbook, buffer);
   } catch {
     throw ApiError.badRequest("Could not read the uploaded file as an .xlsx workbook");
   }

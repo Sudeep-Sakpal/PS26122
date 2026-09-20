@@ -3,6 +3,8 @@ import { connectDB, disconnectDB } from "../config/db";
 import { Project } from "../models/Project";
 import { ScheduleActivity } from "../models/ScheduleActivity";
 import { Dependency } from "../models/Dependency";
+import { Report } from "../models/Report";
+import { ExecutionUpdate } from "../models/ExecutionUpdate";
 import { seedActivities, seedProject } from "./data";
 
 async function resetExistingDemoProject() {
@@ -10,6 +12,8 @@ async function resetExistingDemoProject() {
   if (!existing) return;
 
   console.log(`[seed] removing existing demo data for ${seedProject.code}`);
+  await ExecutionUpdate.deleteMany({ project: existing._id });
+  await Report.deleteMany({ project: existing._id });
   await Dependency.deleteMany({ project: existing._id });
   await ScheduleActivity.deleteMany({ project: existing._id });
   await Project.deleteOne({ _id: existing._id });
