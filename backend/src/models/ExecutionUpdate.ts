@@ -1,9 +1,14 @@
 import { Schema, model, Types, type InferSchemaType } from "mongoose";
 
-// One structured field-progress update extracted from a Report. This is
-// intentionally loosely typed (e.g. `status` is free text, not the
-// ScheduleActivity enum) — matching it against real schedule activities
-// and computing variance/status is B3's job, not this one's.
+// Deterministic schedule-matching methods, in the order B3's matching
+// service attempts them (see services/scheduleMatching.service.ts).
+export const MATCH_METHODS = ["exact-code", "exact-name", "keyword", "fuzzy"] as const;
+export type MatchMethod = (typeof MATCH_METHODS)[number];
+
+// One structured field-progress update extracted from a Report (B2). The
+// activityName/activityCode/status fields stay loosely typed (free text
+// from extraction) — the link* fields below are B3's addition: the result
+// of deterministically matching this update to a real ScheduleActivity.
 const ExecutionUpdateSchema = new Schema(
   {
     project: {
@@ -29,6 +34,18 @@ const ExecutionUpdateSchema = new Schema(
     // The snippet of source text this update was derived from.
     extractedText: { type: String },
     extractionConfidence: { type: Number, min: 0, max: 1, default: 0.5 },
+
+    // --- B3: schedule-link result -----------------------------------
+    linkedActivity: {
+      type: Schema.Types.ObjectId,
+      ref: "ScheduleActivity",
+      index: true,
+    },
+    // 0-100, distinct from extractionConfidence (0-1) — how confident the
+    // deterministic matcher is that linkedActivity is correct.
+    matchConfidence: { type: Number, min: 0, max: 100 },
+    matchMethod: { type: String, enum: MATCH_METHODS },
+    matchedAt: { type: Date },
   },
   { timestamps: true }
 );
