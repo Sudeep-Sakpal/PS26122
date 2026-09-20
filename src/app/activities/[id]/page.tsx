@@ -8,6 +8,7 @@ import {
   fetchActivityIntelligence,
   type ActivityComparison,
 } from "@/lib/api/activities";
+import { fetchActivityImpact } from "@/lib/api/risks";
 import { getDownstreamChain, getRootActivity } from "@/lib/schedule-data";
 import {
   Card,
@@ -19,6 +20,7 @@ import {
 import {
   ActivityStatusBadge,
   DelayStatusBadge,
+  DependencyRiskStatusBadge,
   RiskSeverityBadge,
 } from "@/components/ui/Badge";
 import { PlannedActualBar } from "@/components/dashboard/PlannedActualBar";
@@ -69,9 +71,10 @@ export default async function ActivityDetailPage({
   }
   if (!ownerProjectId || !intelligence) notFound();
 
-  const [chain, executionUpdates] = await Promise.all([
+  const [chain, executionUpdates, impact] = await Promise.all([
     fetchProjectActivities(ownerProjectId),
     fetchExecutionUpdates(ownerProjectId),
+    fetchActivityImpact(ownerProjectId, id),
   ]);
   const activity = chain.find((a) => a.id === id);
   if (!activity) notFound();
@@ -203,6 +206,62 @@ export default async function ActivityDetailPage({
             <CardContent>
               <DependencyConsequence chain={fullChain} currentId={activity.id} />
             </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div>
+                <CardTitle>Downstream impact</CardTitle>
+                <CardDescription>
+                  What this activity&apos;s current state threatens further
+                  down the schedule.
+                </CardDescription>
+              </div>
+            </CardHeader>
+            {impact.downstream.length === 0 ? (
+              <EmptyState
+                title="No downstream activities"
+                description="Nothing in this project's schedule depends on this stage."
+              />
+            ) : !impact.isTrigger ? (
+              <EmptyState
+                title="Not currently a risk trigger"
+                description="This stage isn't delayed, so it isn't propagating risk downstream right now."
+              />
+            ) : (
+              <ul className="divide-y divide-slate-100">
+                {impact.downstream.map((entry) => (
+                  <li key={entry.id} className="px-5 py-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <Link
+                        href={`/activities/${entry.id}`}
+                        className="text-sm font-medium text-slate-800 hover:text-sky-600"
+                      >
+                        {entry.name}
+                      </Link>
+                      {entry.riskStatus && (
+                        <DependencyRiskStatusBadge status={entry.riskStatus} />
+                      )}
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                      <span>
+                        {entry.distance} {entry.distance === 1 ? "hop" : "hops"}{" "}
+                        away
+                      </span>
+                      {entry.severity && (
+                        <RiskSeverityBadge severity={entry.severity} />
+                      )}
+                      {entry.confidence !== undefined && (
+                        <span>{entry.confidence}% confidence</span>
+                      )}
+                    </div>
+                    {entry.reason && (
+                      <p className="mt-1 text-sm text-slate-600">{entry.reason}</p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
           </Card>
 
           <Card>

@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ALL_PROJECTS_ID, useProjectContext } from "@/context/ProjectContext";
 import { projects, risks } from "@/lib/mock-data";
-import { getScheduleRisks } from "@/lib/schedule-data";
+import { fetchProjectRisks, type DependencyRisk } from "@/lib/api/risks";
 import type { RiskStatus } from "@/types";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
@@ -15,6 +15,8 @@ import {
   RiskStatusBadge,
 } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { LoadingState } from "@/components/ui/LoadingState";
 import { RisksIcon } from "@/components/icons";
 import { ScheduleRiskAnalysis } from "@/components/risks/ScheduleRiskAnalysis";
 import { cn, formatDate } from "@/lib/utils";
@@ -28,9 +30,17 @@ const filters: Array<{ label: string; value: RiskStatus | "all" }> = [
 ];
 
 export default function RisksPage() {
-  const { selectedProjectId } = useProjectContext();
+  const {
+    projects: realProjects,
+    activities,
+    selectedProjectId,
+  } = useProjectContext();
   const [filter, setFilter] = useState<RiskStatus | "all">("all");
 
+  // Manually-tracked risk register (category/likelihood/owner/due date) —
+  // B4 has no concept matching this at all, so it stays on mock data,
+  // naturally empty for real projects since mock risk.projectId values
+  // never match a real Mongo id.
   const scoped = useMemo(
     () =>
       selectedProjectId === ALL_PROJECTS_ID
@@ -49,16 +59,51 @@ export default function RisksPage() {
     (r) => r.status === "open" || r.status === "mitigating"
   ).length;
 
-  const scheduleRisks = useMemo(
-    () =>
-      getScheduleRisks(
-        selectedProjectId === ALL_PROJECTS_ID ? undefined : selectedProjectId
-      ),
-    [selectedProjectId]
-  );
-
   const projectCode = (projectId: string) =>
     projects.find((p) => p.id === projectId)?.code ?? "—";
+
+  // Real B4 dependency risks (GET /projects/:id/risks).
+  const [scheduleRisks, setScheduleRisks] = useState<DependencyRisk[]>([]);
+  const [riskLoading, setRiskLoading] = useState(true);
+  const [riskError, setRiskError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      setRiskLoading(true);
+      setRiskError(null);
+      // Clear the previous project's risks immediately so a project
+      // switch never leaves stale risk cards on screen while the new
+      // project's risks load.
+      setScheduleRisks([]);
+
+      try {
+        const data =
+          selectedProjectId === ALL_PROJECTS_ID
+            ? (await Promise.all(realProjects.map((p) => fetchProjectRisks(p.id)))).flat()
+            : await fetchProjectRisks(selectedProjectId);
+        if (!cancelled) setScheduleRisks(data);
+      } catch (err) {
+        if (!cancelled) {
+          setRiskError(err instanceof Error ? err.message : "Failed to load schedule risks.");
+        }
+      } finally {
+        if (!cancelled) setRiskLoading(false);
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedProjectId, realProjects, reloadToken]);
+
+  const activityById = useMemo(
+    () => new Map(activities.map((a) => [a.id, a])),
+    [activities]
+  );
 
   return (
     <div>
@@ -78,7 +123,21 @@ export default function RisksPage() {
       </div>
 
       <div className="mb-8">
-        <ScheduleRiskAnalysis risks={scheduleRisks} />
+        {riskError ? (
+          <Card>
+            <ErrorState
+              title="Couldn't load schedule risks"
+              description={riskError}
+              onRetry={() => setReloadToken((t) => t + 1)}
+            />
+          </Card>
+        ) : riskLoading ? (
+          <Card>
+            <LoadingState />
+          </Card>
+        ) : (
+          <ScheduleRiskAnalysis risks={scheduleRisks} activityById={activityById} />
+        )}
       </div>
 
       <div className="mb-4">

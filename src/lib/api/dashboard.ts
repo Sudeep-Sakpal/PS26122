@@ -1,5 +1,6 @@
 import { apiFetch } from "@/lib/api/client";
 import { mapProject, type RawProject } from "@/lib/api/projects";
+import { severityMap, type RawRiskRecord } from "@/lib/api/risks";
 import type { Project, RiskSeverity } from "@/types";
 
 // Raw shapes mirror backend/src/services/dashboard.service.ts
@@ -49,25 +50,6 @@ interface RawDashboardActivity {
   variance: number | null;
   delayStatus: RawDelayStatus;
   reason: string | null;
-}
-
-type RawRiskStatus = "AT_RISK" | "POTENTIAL_IMPACT";
-type RawRiskSeverity = "HIGH" | "MEDIUM" | "LOW";
-
-interface RawActivityRef {
-  id: string;
-  code: string;
-  name: string;
-}
-
-interface RawRiskRecord {
-  triggerActivity: RawActivityRef & { status: "DELAYED"; variance: number };
-  impactedActivity: RawActivityRef;
-  distance: number;
-  riskStatus: RawRiskStatus;
-  severity: RawRiskSeverity;
-  reason: string;
-  confidence?: number;
 }
 
 interface RawRecentUpdate {
@@ -125,12 +107,6 @@ export interface ProjectDashboard {
   risks: DashboardScheduleRisk[];
   recentUpdates: DashboardExecutionUpdate[];
 }
-
-const severityMap: Record<RawRiskSeverity, RiskSeverity> = {
-  HIGH: "high",
-  MEDIUM: "medium",
-  LOW: "low",
-};
 
 function mapRisk(raw: RawRiskRecord): DashboardScheduleRisk {
   return {

@@ -8,6 +8,7 @@ import type {
   RiskStatus,
 } from "@/types";
 import type { DelayStatus } from "@/lib/api/activities";
+import type { DependencyRiskStatus } from "@/lib/api/risks";
 
 export type Tone = "neutral" | "info" | "success" | "warning" | "danger";
 
@@ -101,6 +102,19 @@ const delayStatusLabel: Record<DelayStatus, string> = {
   NO_DATA: "No Data",
 };
 
+// B4's downstream risk status — a distinct vocabulary from both
+// ActivityStatus and DelayStatus; never merged with either (see
+// backend/API.md).
+const dependencyRiskStatusTone: Record<DependencyRiskStatus, Tone> = {
+  AT_RISK: "danger",
+  POTENTIAL_IMPACT: "warning",
+};
+
+const dependencyRiskStatusLabel: Record<DependencyRiskStatus, string> = {
+  AT_RISK: "At Risk",
+  POTENTIAL_IMPACT: "Potential Impact",
+};
+
 function label(value: string) {
   return value
     .split("-")
@@ -134,4 +148,12 @@ export function IntakeStatusBadge({ status }: { status: IntakeStatus }) {
 
 export function DelayStatusBadge({ status }: { status: DelayStatus }) {
   return <Badge tone={delayStatusTone[status]}>{delayStatusLabel[status]}</Badge>;
+}
+
+export function DependencyRiskStatusBadge({ status }: { status: DependencyRiskStatus }) {
+  return (
+    <Badge tone={dependencyRiskStatusTone[status]}>
+      {dependencyRiskStatusLabel[status]}
+    </Badge>
+  );
 }
