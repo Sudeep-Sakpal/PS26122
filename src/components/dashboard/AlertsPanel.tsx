@@ -1,10 +1,22 @@
 import Link from "next/link";
-import type { ScheduleRisk } from "@/lib/schedule-data";
 import type { Risk, RiskSeverity } from "@/types";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Badge, type Tone } from "@/components/ui/Badge";
 import { AlertIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
+
+// A B4 downstream risk (GET /projects/:id/dashboard), re-shaped for this
+// panel — `triggerDelayDays` comes from the real schedule activity (a B1
+// field the risk engine itself doesn't carry) resolved by the caller.
+export interface CascadeRisk {
+  id: string;
+  triggerId: string;
+  triggerName: string;
+  triggerDelayDays: number;
+  reason: string;
+  severity: RiskSeverity;
+  confidence?: number;
+}
 
 interface Alert {
   id: string;
@@ -35,15 +47,15 @@ export function AlertsPanel({
   scheduleRisks,
   risks,
 }: {
-  scheduleRisks: ScheduleRisk[];
+  scheduleRisks: CascadeRisk[];
   risks: Risk[];
 }) {
   const cascadeAlerts: Alert[] = scheduleRisks.map((risk) => ({
     id: risk.id,
-    title: `${risk.trigger.name} is ${risk.trigger.delayDays} days behind schedule`,
+    title: `${risk.triggerName} is ${risk.triggerDelayDays} days behind schedule`,
     description: risk.reason,
     severity: risk.severity,
-    href: `/activities/${risk.trigger.id}`,
+    href: `/activities/${risk.triggerId}`,
   }));
 
   const registerAlerts: Alert[] = risks

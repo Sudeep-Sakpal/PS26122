@@ -1,26 +1,10 @@
 import Link from "next/link";
-import type { ScheduleActivity } from "@/types";
+import type { DashboardExecutionUpdate } from "@/lib/api/dashboard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { formatDate } from "@/lib/utils";
 
-interface FeedItem {
-  id: string;
-  date: string;
-  author: string;
-  note: string;
-  activityId: string;
-  activityName: string;
-}
-
-export function ExecutionFeed({ activities }: { activities: ScheduleActivity[] }) {
-  const items: FeedItem[] = activities
-    .flatMap((activity) =>
-      activity.updates.map((update) => ({
-        ...update,
-        activityId: activity.id,
-        activityName: activity.name,
-      }))
-    )
+export function ExecutionFeed({ updates }: { updates: DashboardExecutionUpdate[] }) {
+  const items = [...updates]
     .sort((a, b) => (a.date < b.date ? 1 : -1))
     .slice(0, 6);
 
@@ -49,7 +33,6 @@ export function ExecutionFeed({ activities }: { activities: ScheduleActivity[] }
             </span>
           </div>
           <p className="mt-1 text-sm text-slate-600">{item.note}</p>
-          <p className="mt-1 text-[11px] text-slate-400">{item.author}</p>
         </li>
       ))}
     </ul>

@@ -3,7 +3,7 @@ import type { Project, ScheduleActivity } from "@/types";
 
 // Raw shapes as returned by the backend (backend/API.md) — Mongo
 // documents serialized as-is, so ids are `_id` and dates are ISO strings.
-interface RawProject {
+export interface RawProject {
   _id: string;
   name: string;
   code: string;
@@ -35,7 +35,7 @@ interface RawActivity {
   dependsOn: string[];
 }
 
-function mapProject(raw: RawProject): Project {
+export function mapProject(raw: RawProject): Project {
   return {
     id: raw._id,
     code: raw.code,
