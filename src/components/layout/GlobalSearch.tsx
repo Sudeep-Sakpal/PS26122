@@ -2,13 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { scheduleActivities } from "@/lib/schedule-data";
-import { projects } from "@/lib/mock-data";
+import { useProjectContext } from "@/context/ProjectContext";
 import { ActivityStatusBadge } from "@/components/ui/Badge";
 import { SearchIcon } from "@/components/icons";
 
 export function GlobalSearch() {
   const router = useRouter();
+  const { projects, activities } = useProjectContext();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -26,7 +26,7 @@ export function GlobalSearch() {
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (q === "") return [];
-    return scheduleActivities
+    return activities
       .filter(
         (a) =>
           a.name.toLowerCase().includes(q) ||
@@ -34,7 +34,7 @@ export function GlobalSearch() {
           a.owner.toLowerCase().includes(q)
       )
       .slice(0, 6);
-  }, [query]);
+  }, [activities, query]);
 
   function goTo(id: string) {
     router.push(`/activities/${id}`);

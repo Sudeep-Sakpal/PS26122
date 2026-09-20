@@ -1,13 +1,17 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { projects, risks } from "@/lib/mock-data";
+import { risks } from "@/lib/mock-data";
+import { ApiError } from "@/lib/api/client";
+import {
+  fetchActivityDetail,
+  fetchProjectActivities,
+  fetchProjects,
+} from "@/lib/api/projects";
 import {
   getActivitySource,
   getDownstreamChain,
   getReportReason,
   getRootActivity,
-  getScheduleActivity,
-  getScheduleForProject,
 } from "@/lib/schedule-data";
 import {
   Card,
@@ -29,11 +33,34 @@ export default async function ActivityDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const activity = getScheduleActivity(id);
+
+  const projects = await fetchProjects();
+
+  // The route only carries an activity id, but the backend scopes activity
+  // lookups by project (GET /projects/:id/activities/:activityId). Probe
+  // each project's detail endpoint to find the one that owns this activity;
+  // a 400/404 just means "not this project", anything else is a real
+  // failure and should surface as an error state, not a false not-found.
+  let ownerProjectId: string | null = null;
+  for (const candidate of projects) {
+    try {
+      await fetchActivityDetail(candidate.id, id);
+      ownerProjectId = candidate.id;
+      break;
+    } catch (err) {
+      if (err instanceof ApiError && (err.status === 400 || err.status === 404)) {
+        continue;
+      }
+      throw err;
+    }
+  }
+  if (!ownerProjectId) notFound();
+
+  const chain = await fetchProjectActivities(ownerProjectId);
+  const activity = chain.find((a) => a.id === id);
   if (!activity) notFound();
 
   const project = projects.find((p) => p.id === activity.projectId);
-  const chain = getScheduleForProject(activity.projectId);
   const fullChain = getDownstreamChain(chain, getRootActivity(chain, activity));
   const varianceValue = activity.actual - activity.planned;
   const projectRisks = risks.filter(

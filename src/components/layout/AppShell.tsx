@@ -4,9 +4,14 @@ import { useState } from "react";
 import { Sidebar, SidebarContent } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { CloseIcon } from "@/components/icons";
+import { useProjectContext } from "@/context/ProjectContext";
+import { LoadingState } from "@/components/ui/LoadingState";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { Card } from "@/components/ui/Card";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const { isLoading, error, refetch } = useProjectContext();
 
   return (
     <div className="flex min-h-screen bg-slate-50">
@@ -34,7 +39,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="flex min-h-screen w-full flex-1 flex-col lg:min-w-0">
         <Header onMenuClick={() => setMobileNavOpen(true)} />
         <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
-          <div className="mx-auto max-w-7xl">{children}</div>
+          <div className="mx-auto max-w-7xl">
+            {error ? (
+              <Card>
+                <ErrorState
+                  title="Couldn't load project data"
+                  description={error}
+                  onRetry={refetch}
+                />
+              </Card>
+            ) : isLoading ? (
+              <Card>
+                <LoadingState />
+              </Card>
+            ) : (
+              children
+            )}
+          </div>
         </main>
       </div>
     </div>

@@ -3,8 +3,6 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ALL_PROJECTS_ID, useProjectContext } from "@/context/ProjectContext";
-import { projects } from "@/lib/mock-data";
-import { scheduleActivities } from "@/lib/schedule-data";
 import type { ActivityStatus } from "@/types";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
@@ -23,20 +21,23 @@ const filters: Array<{ label: string; value: ActivityStatus | "all" }> = [
   { label: "Completed", value: "completed" },
 ];
 
-const byId = new Map(scheduleActivities.map((a) => [a.id, a]));
-
 export default function ActivitiesPage() {
   const router = useRouter();
-  const { selectedProjectId } = useProjectContext();
+  const { projects, activities, selectedProjectId } = useProjectContext();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<ActivityStatus | "all">("all");
+
+  const byId = useMemo(
+    () => new Map(activities.map((a) => [a.id, a])),
+    [activities]
+  );
 
   const scoped = useMemo(
     () =>
       selectedProjectId === ALL_PROJECTS_ID
-        ? scheduleActivities
-        : scheduleActivities.filter((a) => a.projectId === selectedProjectId),
-    [selectedProjectId]
+        ? activities
+        : activities.filter((a) => a.projectId === selectedProjectId),
+    [activities, selectedProjectId]
   );
 
   const filtered = useMemo(() => {

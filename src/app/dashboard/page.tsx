@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { ALL_PROJECTS_ID, useProjectContext } from "@/context/ProjectContext";
 import { risks } from "@/lib/mock-data";
-import { getScheduleForProject, getScheduleRisks } from "@/lib/schedule-data";
+import { getScheduleRisks } from "@/lib/schedule-data";
 import { StatCard } from "@/components/ui/StatCard";
 import {
   Card,
@@ -18,31 +18,50 @@ import { ScheduleChainVisual } from "@/components/dashboard/ScheduleChainVisual"
 import { ScheduleChainTable } from "@/components/dashboard/ScheduleChainTable";
 import { ExecutionFeed } from "@/components/dashboard/ExecutionFeed";
 import { AlertsPanel } from "@/components/dashboard/AlertsPanel";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { formatDate } from "@/lib/utils";
 
 export default function DashboardPage() {
-  const { projects, selectedProjectId, selectedProject } = useProjectContext();
+  const { projects, activities, selectedProjectId, selectedProject } =
+    useProjectContext();
   const focusProject = selectedProject ?? projects[0];
+  const focusProjectId = focusProject?.id ?? null;
 
   const chain = useMemo(
-    () => getScheduleForProject(focusProject.id),
-    [focusProject.id]
+    () =>
+      focusProjectId
+        ? activities
+            .filter((a) => a.projectId === focusProjectId)
+            .sort((a, b) => a.sequence - b.sequence)
+        : [],
+    [activities, focusProjectId]
   );
   const projectRisks = useMemo(
-    () => risks.filter((r) => r.projectId === focusProject.id),
-    [focusProject.id]
+    () => (focusProjectId ? risks.filter((r) => r.projectId === focusProjectId) : []),
+    [focusProjectId]
   );
   const scheduleRisks = useMemo(
-    () => getScheduleRisks(focusProject.id),
-    [focusProject.id]
+    () => (focusProjectId ? getScheduleRisks(focusProjectId) : []),
+    [focusProjectId]
   );
 
-  const plannedProgress = Math.round(
-    chain.reduce((sum, a) => sum + a.planned, 0) / chain.length
-  );
-  const actualProgress = Math.round(
-    chain.reduce((sum, a) => sum + a.actual, 0) / chain.length
-  );
+  if (!focusProject) {
+    return (
+      <Card>
+        <EmptyState
+          title="No projects yet"
+          description="Create a project in the backend to see its command center here."
+        />
+      </Card>
+    );
+  }
+
+  const plannedProgress = chain.length
+    ? Math.round(chain.reduce((sum, a) => sum + a.planned, 0) / chain.length)
+    : 0;
+  const actualProgress = chain.length
+    ? Math.round(chain.reduce((sum, a) => sum + a.actual, 0) / chain.length)
+    : 0;
   const overallVariance = actualProgress - plannedProgress;
   const delayedCount = chain.filter((a) => a.status === "delayed").length;
   const atRiskCount = chain.filter((a) => a.status === "at-risk").length;
