@@ -3,12 +3,15 @@ import { ExecutionUpdate } from "../models/ExecutionUpdate";
 import { requireProjectExists } from "./project.service";
 import { matchExecutionUpdateToActivity, type MatchOutcome } from "./scheduleMatching.service";
 import { ApiError } from "../utils/ApiError";
+import { toExecutionUpdateJSON } from "../utils/serializers";
 
 export async function listExecutionUpdatesForProject(projectId: string) {
-  return ExecutionUpdate.find({ project: new Types.ObjectId(projectId) })
+  const updates = await ExecutionUpdate.find({ project: new Types.ObjectId(projectId) })
     .sort({ updateDate: -1, createdAt: -1 })
     .populate("linkedActivity", "code name sequence")
     .lean();
+
+  return updates.map(toExecutionUpdateJSON);
 }
 
 /** Fetches an execution update scoped to a project in one query, so a
@@ -51,7 +54,7 @@ export async function linkExecutionUpdate(projectId: string, updateId: string) {
   const outcome = await matchExecutionUpdateToActivity(projectId, update);
   await applyMatch(update, outcome);
 
-  return { executionUpdate: update, match: outcome };
+  return { executionUpdate: toExecutionUpdateJSON(update), match: outcome };
 }
 
 export interface LinkAllSummary {

@@ -6,6 +6,7 @@ import { detectReportFileType, extractDocumentText } from "./documentExtraction"
 import { runExtraction } from "./extraction";
 import { extractionCandidateSchema } from "../validation/report.validation";
 import { ApiError } from "../utils/ApiError";
+import { toExecutionUpdateJSON } from "../utils/serializers";
 
 const MAX_STORED_TEXT_LENGTH = 20_000;
 
@@ -110,7 +111,10 @@ export async function ingestReport(projectId: string, file: UploadedReportFile) 
 
   return {
     report,
-    executionUpdates,
+    // Rescaled to 0-100 for the API response only (see serializers.ts) —
+    // matchConfidence/risk confidence are already 0-100, and this is the
+    // first response a client sees them all in.
+    executionUpdates: executionUpdates.map(toExecutionUpdateJSON),
     extraction: { provider: extraction.provider, warnings },
   };
 }
@@ -123,9 +127,14 @@ export async function listReportsForProject(projectId: string) {
     ExecutionUpdate.find({ project }).sort({ createdAt: -1 }).lean(),
   ]);
 
-  const updatesByReport = new Map<string, typeof executionUpdates>();
-  for (const update of executionUpdates) {
-    const key = update.source.toString();
+  // Serialize once; the nested per-report view and the flat list below
+  // both reference these same already-rescaled copies, so this can't
+  // double-scale extractionConfidence.
+  const serializedUpdates = executionUpdates.map(toExecutionUpdateJSON);
+
+  const updatesByReport = new Map<string, typeof serializedUpdates>();
+  for (const update of serializedUpdates) {
+    const key = (update.source as Types.ObjectId).toString();
     const list = updatesByReport.get(key) ?? [];
     list.push(update);
     updatesByReport.set(key, list);
@@ -136,5 +145,5 @@ export async function listReportsForProject(projectId: string) {
     executionUpdates: updatesByReport.get(r._id.toString()) ?? [],
   }));
 
-  return { reports: reportsWithUpdates, executionUpdates };
+  return { reports: reportsWithUpdates, executionUpdates: serializedUpdates };
 }

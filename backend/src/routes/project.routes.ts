@@ -21,6 +21,7 @@ import {
   getProjectDependenciesHandler,
   getProjectRisksHandler,
 } from "../controllers/risk.controller";
+import { getProjectDashboardHandler } from "../controllers/dashboard.controller";
 import { uploadSchedule } from "../middleware/upload";
 import { uploadReport } from "../middleware/uploadReport";
 
@@ -29,6 +30,7 @@ const router = Router();
 router.get("/", getProjects);
 router.post("/", createProject);
 router.get("/:id", getProjectById);
+router.get("/:id/dashboard", getProjectDashboardHandler);
 router.get("/:id/activities", getProjectActivities);
 router.get("/:id/activities/:activityId", getActivityByIdHandler);
 router.get("/:id/activities/:activityId/comparison", getActivityComparisonHandler);
